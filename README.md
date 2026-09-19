@@ -33,6 +33,7 @@ Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
 ## Dokümanlar
 
+- [docs/BASIT-AKIS.md](docs/BASIT-AKIS.md) — **sistemin uçtan uca sade anlatımı; buradan başla**
 - [docs/OFFGATE-BUILD-PLAN.md](docs/OFFGATE-BUILD-PLAN.md) — mimari, veri yapıları, anchor referansı
 - [docs/OFFGATE-PACKAGES.md](docs/OFFGATE-PACKAGES.md) — paket paket geliştirme planı ve karar kayıtları
 - [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) — contract ID, hesaplar, işlem hash'leri
