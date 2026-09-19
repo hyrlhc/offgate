@@ -52,6 +52,7 @@ Preferences nvs;
 
 static uint32_t g_counter = 0;       // kapidan gecen toplam kisi
 static uint32_t g_receipt_count = 0; // NVS'te duran fis sayisi
+static uint32_t g_receipt_lost = 0;  // saklanamayan fis — settle edilemez
 static String g_status = "HAZIR";
 static String g_detail = "";
 static String g_status_class = "idle";
@@ -91,12 +92,28 @@ static void mark_spent(const uint8_t ent_hash[32], uint32_t seq) {
   nvs.putBool(spent_key(ent_hash, seq).c_str(), true);
 }
 
-/** Fisi settle icin sakla. Elektrik kesilse de hasilat kaybolmaz. */
-static void store_receipt(const String &json) {
-  if (g_receipt_count >= MAX_RECEIPTS) return;
-  nvs.putString((String("r") + g_receipt_count).c_str(), json);
+/**
+ * Fisi settle icin sakla. Elektrik kesilse de hasilat kaybolmaz.
+ *
+ * Yazma BASARISIZ olabilir (NVS dolar). Eskiden donus degeri
+ * yoksayiliyordu: kapi aciliyor, fis kayboluyor, o gecisin parasi zincire
+ * hic yazilamiyordu — sessiz gelir kaybi. Artik sayiyoruz ve /health
+ * uzerinden gorunur kiliyoruz; kaybi fark etmemek, kaybetmekten beterdir.
+ */
+static bool store_receipt(const String &json) {
+  if (g_receipt_count >= MAX_RECEIPTS) {
+    g_receipt_lost++;
+    Serial.printf("[fis] defter dolu (%d) — KAYIT YAPILAMADI\n", MAX_RECEIPTS);
+    return false;
+  }
+  if (nvs.putString((String("r") + g_receipt_count).c_str(), json) == 0) {
+    g_receipt_lost++;
+    Serial.println("[fis] NVS yazilamadi — KAYIT YAPILAMADI, bu gecis settle edilemez");
+    return false;
+  }
   g_receipt_count++;
   nvs.putUInt("rcount", g_receipt_count);
+  return true;
 }
 
 // --- Gosterge --------------------------------------------------------------
@@ -140,6 +157,40 @@ static void reject(const String &why) {
   flash(LED_NO);
 }
 
+/**
+ * Komsu kapi, BIZE ait bir bilete dayanan gecis icin izin istiyor.
+ *
+ * Kullanici M307 bileti aldi ama M308'e geldi. M308 bileti kendi basina
+ * dogrulayabilir — operator imzasi, cihaz imzasi, sira siniri hepsi
+ * kendinde. Dogrulayamadigi tek sey su: bu fis daha once harcandi mi?
+ * O defter bizde. Bu yuzden bize soruyor.
+ *
+ * Fisi cevabi gondermeden ONCE yakiyoruz. Cevap kaybolursa kullanici bir
+ * hak kaybeder; yakmayi sonraya birakirsak iki kapidan ayni anda gecilir.
+ * Ikisinden birini secmek zorundayiz ve cifte harcama daha pahalidir.
+ */
+static uint8_t mesh_ask_heard(const uint8_t ent_hash[32], uint32_t seq, const char *from) {
+  char h[17];
+  bytes_to_hex(ent_hash, 8, h);
+
+  if (is_spent(ent_hash, seq)) {
+    Serial.printf("[mesh] %s sordu: %s #%u — ZATEN HARCANMIS, reddedildi\n", from, h, seq);
+    g_status = "UZAKTAN RED";
+    g_status_class = "no";
+    g_detail = String(from) + " icin fis #" + seq + " zaten harcanmis";
+    flash(LED_NO);
+    return VERDICT_SPENT;
+  }
+
+  mark_spent(ent_hash, seq);   // once yak, sonra onayla
+  Serial.printf("[mesh] %s sordu: %s #%u — YAKILDI, onay verildi\n", from, h, seq);
+  g_status = "UZAKTAN ONAY";
+  g_status_class = "ok";
+  g_detail = String(from) + " icin fis #" + seq + " yakildi";
+  flash(LED_OK);
+  return VERDICT_OK;
+}
+
 // --- Yanit yardimcilari ----------------------------------------------------
 
 static void send_json(int code, const String &body) {
@@ -147,30 +198,31 @@ static void send_json(int code, const String &body) {
   http.send(code, "application/json", body);
 }
 
-static void deny(const char *reason, const char *message) {
+static String deny(const char *reason, const char *message) {
   reject(String(reason));
-  send_json(200, String("{\"ok\":false,\"reason\":\"") + reason +
-                     "\",\"message\":\"" + message + "\"}");
+  return String("{\"ok\":false,\"reason\":\"") + reason +
+         "\",\"message\":\"" + message + "\"}";
 }
 
-// --- /pay ------------------------------------------------------------------
+// --- Odeme dogrulamasi -----------------------------------------------------
 
-static void handle_pay() {
-  if (http.method() != HTTP_POST) { send_json(405, "{\"ok\":false}"); return; }
-
+/**
+ * Bir bilet+fis demetini dogrular ve karari JSON olarak dondurur.
+ *
+ * Tasimadan bagimsizdir (karar K-8): HTTP'den de, seri porttan da ayni
+ * fonksiyon cagrilir. Kripto, defter ve LED davranisi her iki yolda da
+ * birebir ayni — test yolu ile saha yolu ayrisamaz.
+ */
+static String process_pay(const String &body) {
   JsonDocument doc;
-  if (deserializeJson(doc, http.arg("plain"))) {
-    deny("bad_json", "Istek okunamadi");
-    return;
-  }
+  if (deserializeJson(doc, body)) return deny("bad_json", "Istek okunamadi");
 
   // 1. Entitlement alanlarini oku.
   Entitlement ent{};
   JsonObject e = doc["ent"];
   if (!hex_to_bytes(e["user_raw"] | "", ent.user_raw, 32) ||
       !hex_to_bytes(e["device_pk"] | "", ent.device_pk, 32)) {
-    deny("bad_ent", "Bilet bozuk");
-    return;
+    return deny("bad_ent", "Bilet bozuk");
   }
   strlcpy(ent.event, e["event"] | "", sizeof(ent.event));
   strlcpy(ent.gate, e["gate"] | "", sizeof(ent.gate));
@@ -179,10 +231,12 @@ static void handle_pay() {
   ent.max_uses = e["max_uses"] | 0U;
   ent.expires = e["expires"] | 0ULL;
 
-  // 2. Bu bilet bu kapiya mi ait?
-  if (strcmp(ent.gate, GATE_ID) != 0) {
-    deny("wrong_gate", "Bu bilet baska bir kapiya ait");
-    return;
+  // 2. Bu bilet bu kapiya mi ait? Degilse hemen reddetmiyoruz: bileti
+  // burada dogrulayip sahibi kapidan izin isteyecegiz. Ama o kapi
+  // duyulmuyorsa bosuna dogrulama yapmayalim.
+  const bool foreign = strcmp(ent.gate, GATE_ID) != 0;
+  if (foreign && !mesh_peer(ent.gate)) {
+    return deny("home_gate_unheard", "Biletin kapisi bu agda duyulmuyor");
   }
 
   // 3. Fisi oku.
@@ -190,8 +244,7 @@ static void handle_pay() {
   JsonObject jr = doc["receipt"];
   if (!hex_to_bytes(jr["ent_hash"] | "", r.ent_hash, 32) ||
       !hex_to_bytes(jr["sig"] | "", r.sig, 64)) {
-    deny("bad_receipt", "Fis bozuk");
-    return;
+    return deny("bad_receipt", "Fis bozuk");
   }
   r.seq = jr["seq"] | 0U;
   r.fare_try = jr["fare_try"] | 0ULL;
@@ -201,14 +254,12 @@ static void handle_pay() {
   // zincire yazamaz: eksikse simdi reddet, gece yarisi degil.
   const char *user = jr["user"] | "";
   if (strlen(user) != 56 || user[0] != 'G') {
-    deny("no_user", "Fiste kullanici adresi yok");
-    return;
+    return deny("no_user", "Fiste kullanici adresi yok");
   }
 
   // 4. Fis ile bilet ayni ucreti mi soyluyor?
   if (r.fare_try != ent.fare_try) {
-    deny("fare_mismatch", "Ucret uyusmuyor");
-    return;
+    return deny("fare_mismatch", "Ucret uyusmuyor");
   }
 
   // 5. Entitlement dogrulamasi — onbellekte varsa atlanir.
@@ -228,17 +279,14 @@ static void handle_pay() {
   } else {
     uint8_t op_sig[64];
     if (!hex_to_bytes(doc["operator_sig"] | "", op_sig, 64)) {
-      deny("bad_sig", "Operator imzasi bozuk");
-      return;
+      return deny("bad_sig", "Operator imzasi bozuk");
     }
     if (!verify_entitlement(ent, op_sig, OPERATOR_PK, ent_hash)) {
-      deny("bad_operator_sig", "Bilet operator tarafindan imzalanmamis");
-      return;
+      return deny("bad_operator_sig", "Bilet operator tarafindan imzalanmamis");
     }
     // Fis, gercekten bu bilete mi bagli?
     if (memcmp(ent_hash, r.ent_hash, 32) != 0) {
-      deny("ent_mismatch", "Fis bu bilete ait degil");
-      return;
+      return deny("ent_mismatch", "Fis bu bilete ait degil");
     }
     EntCache &slot = g_cache[g_cache_next];
     slot.used = true;
@@ -250,23 +298,37 @@ static void handle_pay() {
 
   // 6. Sira numarasi hak sinirinda mi?
   if (r.seq < 1 || r.seq > ent.max_uses) {
-    deny("bad_seq", "Gecersiz fis sirasi");
-    return;
+    return deny("bad_seq", "Gecersiz fis sirasi");
   }
 
   // 7. Daha once harcanmis mi? Tekrar saldirisini burasi durdurur.
   if (is_spent(r.ent_hash, r.seq)) {
-    deny("already_spent", "Bu fis kullanilmis");
-    return;
+    return deny("already_spent", "Bu fis kullanilmis");
   }
 
   // 8. Fis imzasi — cihaz anahtariyla.
   if (!verify_receipt(r, ent.device_pk)) {
-    deny("bad_receipt_sig", "Fis imzasi gecersiz");
-    return;
+    return deny("bad_receipt_sig", "Fis imzasi gecersiz");
   }
 
-  // 9. Kabul: once harca, sonra sakla.
+  // 9. Bilet baska kapiya aitse, o kapidan izin al. Sessizlik REDDIR:
+  // cevap gelmezse fisin orada harcanip harcanmadigini bilemeyiz.
+  uint32_t waited = 0;
+  if (foreign) {
+    g_status = "SORULUYOR";
+    g_status_class = "idle";
+    g_detail = String(ent.gate) + " kapisina soruluyor...";
+    uint8_t verdict = mesh_request_pass(GATE_ID, ent.gate, r.ent_hash, r.seq, &waited);
+    if (verdict == VERDICT_SPENT) {
+      return deny("already_spent_home", "Bu fis kendi kapisinda kullanilmis");
+    }
+    if (verdict != VERDICT_OK) {
+      return deny("no_answer", "Biletin kapisi cevap vermedi");
+    }
+    Serial.printf("[mesh] %s onay verdi (%u ms)\n", ent.gate, waited);
+  }
+
+  // 10. Kabul: once harca, sonra sakla.
   mark_spent(r.ent_hash, r.seq);
 
   char eh[65], sg[129];
@@ -275,15 +337,27 @@ static void handle_pay() {
   String stored = String("{\"ent_hash\":\"") + eh + "\",\"user\":\"" + String(user) +
                   "\",\"seq\":" + r.seq + ",\"fare_try\":\"" + (uint32_t)r.fare_try +
                   "\",\"ts\":" + (uint32_t)r.ts + ",\"sig\":\"" + sg + "\"}";
-  store_receipt(stored);
+  bool stored_ok = store_receipt(stored);
 
-  accept(String("fis #") + r.seq + " / " + ent.max_uses);
+  accept(foreign ? (String("fis #") + r.seq + " — " + ent.gate + " onayladi (" + waited + " ms)")
+                 : (String("fis #") + r.seq + " / " + ent.max_uses));
 
   // Komsu kapilara imzali harcama kaydi — router yok, internet yok.
   mesh_broadcast(GATE_ID, r.ent_hash, r.seq, g_counter, r.ts);
-  send_json(200, String("{\"ok\":true,\"seq\":") + r.seq +
+  return String("{\"ok\":true,\"seq\":") + r.seq +
                      ",\"left\":" + (ent.max_uses - r.seq) +
-                     ",\"counter\":" + g_counter + "}");
+                     ",\"counter\":" + g_counter +
+                     ",\"home\":\"" + ent.gate + "\"" +
+                     ",\"remote\":" + (foreign ? "true" : "false") +
+         ",\"approval_ms\":" + waited +
+         ",\"stored\":" + (stored_ok ? "true" : "false") + "}";
+}
+
+// --- /pay ------------------------------------------------------------------
+
+static void handle_pay() {
+  if (http.method() != HTTP_POST) { send_json(405, "{\"ok\":false}"); return; }
+  send_json(200, process_pay(http.arg("plain")));
 }
 
 // --- Diger uclar -----------------------------------------------------------
@@ -295,6 +369,7 @@ static void handle_peers() {
   String out = String("{\"gate\":\"") + GATE_ID + "\",\"pk\":\"" + pk_hex +
                "\",\"counter\":" + g_counter +
                ",\"sent\":" + g_mesh_sent + ",\"recv\":" + g_mesh_recv +
+               ",\"ask_sent\":" + g_ask_sent + ",\"ask_served\":" + g_ask_served +
                ",\"peers\":[";
   bool first = true;
   for (int i = 0; i < MESH_MAX_PEERS; i++) {
@@ -356,6 +431,7 @@ static void handle_reset() {
   nvs.clear();
   g_counter = 0;
   g_receipt_count = 0;
+  g_receipt_lost = 0;
   for (int i = 0; i < ENT_CACHE_SIZE; i++) g_cache[i].used = false;
   g_status = "HAZIR";
   g_status_class = "idle";
@@ -365,7 +441,9 @@ static void handle_reset() {
 
 static void handle_health() {
   send_json(200, String("{\"gate\":\"") + GATE_ID + "\",\"counter\":" + g_counter +
-                     ",\"receipts\":" + g_receipt_count + ",\"uptime\":" + (millis() / 1000) + "}");
+                     ",\"receipts\":" + g_receipt_count +
+                     ",\"lost\":" + g_receipt_lost +
+                     ",\"uptime\":" + (millis() / 1000) + "}");
 }
 
 /** Captive portal: taninmayan her istek odeme sayfasina yonlendirilir. */
@@ -398,7 +476,7 @@ void setup() {
   WiFi.softAP(AP_SSID, nullptr, MESH_CHANNEL);
   IPAddress ip = WiFi.softAPIP();
 
-  bool mesh_ok = mesh_begin(nvs, mesh_spent_heard);
+  bool mesh_ok = mesh_begin(nvs, mesh_spent_heard, mesh_ask_heard);
 
   // Tum DNS sorgularini kendine yonlendir — captive portal boyle acilir.
   dns.setErrorReplyCode(DNSReplyCode::NoError);
@@ -429,9 +507,60 @@ void setup() {
                 mesh_ok ? "acik" : "KAPALI", MESH_CHANNEL);
 }
 
+/**
+ * Seri port konsolu — saha disi dogrulama icin.
+ *
+ *   PAY {json}   odeme demetini isler (HTTP /pay ile AYNI fonksiyon)
+ *   PEERS        kimlik ve taninan komsular
+ *   RESET        sayaci ve harcanmis fisleri sifirlar
+ *
+ * Wifi'ye baglanmadan kapiyi zorlamak icin var. Ayri bir dogrulama yolu
+ * DEGIL: process_pay'e girer, ayni imzalar ayni sekilde kontrol edilir.
+ */
+static void serial_console() {
+  static String line;
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c != '\n') {
+      if (line.length() < 4096) line += c;
+      continue;
+    }
+    String cmd = line;
+    line = "";
+    cmd.trim();
+    if (cmd.startsWith("PAY ")) {
+      uint32_t t0 = millis();
+      String out = process_pay(cmd.substring(4));
+      Serial.printf("[pay] %u ms %s\n", millis() - t0, out.c_str());
+    } else if (cmd == "PEERS") {
+      char pk_hex[65];
+      bytes_to_hex(g_gate_pk, 32, pk_hex);
+      Serial.printf("[peers] %s kimlik=%s sayac=%u sordum=%u onayladim=%u\n",
+                    GATE_ID, pk_hex, g_counter, g_ask_sent, g_ask_served);
+      for (int i = 0; i < MESH_MAX_PEERS; i++) {
+        if (!g_peers[i].used) continue;
+        Serial.printf("[peers]   %s gecis=%u kayit=%u %usn once\n", g_peers[i].gate,
+                      g_peers[i].counter, g_peers[i].records,
+                      (millis() - g_peers[i].heard) / 1000);
+      }
+    } else if (cmd == "RESET") {
+      nvs.clear();
+      g_counter = 0;
+      g_receipt_count = 0;
+      g_receipt_lost = 0;
+      for (int i = 0; i < ENT_CACHE_SIZE; i++) g_cache[i].used = false;
+      Serial.println("[reset] defter silindi");
+    } else if (cmd.length()) {
+      Serial.println("[?] PAY {json} | PEERS | RESET");
+    }
+  }
+}
+
 void loop() {
   dns.processNextRequest();
   http.handleClient();
+  serial_console();
 
   // Komsulardan gelen imzali kayitlar — kesme baglaminda degil, burada islenir.
   mesh_pump(GATE_ID);

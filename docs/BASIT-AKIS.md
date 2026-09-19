@@ -470,7 +470,80 @@ Komşunun açık anahtarı **ilk duyulduğunda sabitleniyor**
 için yeterli; üretimde kapı anahtarları `register_gate` ile sözleşmeye
 kaydedilip oradan dağıtılmalı.
 
-Ayrıca bu sürümde bilet hâlâ **tek kapıya bağlı**. Gossip, biletin başka
-kapıda kullanılmasını sağlamaz — yalnızca harcama kayıtlarını çoğaltır.
-Kapılar arası serbest geçiş, ağ bölünmesinde çifte harcama açar; onu çözmek
-ayrı bir iş.
+---
+
+## 15. Başka kapıdan geçmek — soru ve onay
+
+Kullanıcı M307 için bilet aldı ama M308'e geldi. Eskiden kapı bunu görür
+görmez reddederdi. Artık reddetmiyor: **sahibine soruyor.**
+
+### Neden sormak zorunda
+
+M308 biletin geçerli olduğunu **kendi başına** ispatlayabilir. Operatör
+imzası elinde, cihaz imzasını doğrulayabiliyor, sıra sınırını biliyor.
+Doğrulayamadığı tek şey şu: *bu fiş daha önce harcandı mı?*
+
+Çünkü o defter M307'de. Çift harcamayı durduran şey imza değil, **deftere
+kimin sahip olduğu**. Bu yüzden M308'in tek yapabileceği şey sormaktır.
+
+### Mesaj
+
+```
+domain(14) || soran(16) || sorulan(16) || ent_hash(32) || seq(4)
+  || nonce(8) || karar(1)                                       = 91 bayt
++ imza(64) + açık anahtar(32)                                   = 187 bayt
+```
+
+Soru `OFFGATE-ASK-v1`, cevap `OFFGATE-ACK-v1`. Aynı gövde, farklı alan adı.
+
+### Sıra
+
+1. M308 bileti baştan sona doğrular — operatör imzası, cihaz imzası, sıra.
+2. M307'ye imzalı soru gönderir: *"şu fişi benim için yakar mısın?"*
+3. M307 kendi defterine bakar. Boşsa **önce yakar, sonra** imzalı onay döner.
+4. M308 onayı doğrular: imza M307'nin mi, nonce benim sorduğum mu, fiş ve
+   sıra tutuyor mu. Hepsi tamamsa kapı açılır.
+
+### Neden bu sıra
+
+**Önce yakmak, sonra onaylamak** tek doğru sıra. Tersi olsaydı onay giderken
+kullanıcı aynı fişle M307'ye koşabilirdi — iki kapıdan tek fişle geçerdi.
+
+Bunun bedeli var: cevap yolda kaybolursa fiş yanmış ama geçiş olmamış olur,
+kullanıcı bir hak kaybeder. İkisinden birini seçmek zorundayız ve çifte
+harcama daha pahalıdır.
+
+**Sessizlik reddir.** M307 cevap vermezse M308 geçirmez. M307 hiç duyulmuyorsa
+zaten en baştan reddeder (`home_gate_unheard`). Ağ koptuğunda sistem kapanır,
+açılmaz.
+
+### Sahte soru üretilebilir mi
+
+Hayır. Soru yalnızca **önceden tanınan** bir komşudan kabul edilir ve o
+komşunun gizli anahtarıyla imzalıdır. Duyuru için ilk-duyuşta-güven yeterli —
+duyuru yalnızca ret üretebilir. Soru ise fiş yakıyor, yani hak eksiltiyor;
+tanımadığımız bir radyoya bunu yaptırmayız.
+
+### Ölçülen süre
+
+Gerçek donanımda, gerçek operatör imzalı biletle:
+
+| Adım | Süre |
+|---|---|
+| Ed25519 doğrulama (tek) | 98 ms |
+| Kapılar arası onay gidiş-dönüş | 327 ms |
+| Kendi kapısında geçiş (uçtan uca) | 261 ms |
+| Başka kapıdan geçiş (uçtan uca) | 633–711 ms |
+
+### Kalan sınır
+
+Komşunun açık anahtarı **ilk duyulduğunda sabitleniyor**
+(trust-on-first-use). Kapalı bir demo ağı için yeterli; üretimde kapı
+anahtarları `register_gate` ile sözleşmeye kaydedilip oradan dağıtılmalı.
+
+Bir de: fiş defteri NVS'te duruyor ve NVS **20 KB**. Dolduğunda fiş
+saklanamaz — geçiş olur ama o para zincire yazılamaz. Eskiden bu **sessizce**
+oluyordu; artık sayılıyor ve `/health` içinde `lost` alanında görünüyor.
+Bölüm tablosunu büyütmeyi denedim, `esp32dev` önyükleyicisi uygulamayı
+bulamayıp reset döngüsüne girdi; geri alındı. Demo öncesi `/reset` ile defteri
+boşaltmak şimdilik yeterli çözüm.
