@@ -351,19 +351,26 @@ fn stats(e: Env, event: Symbol) -> (u32, u32, i128)   // beyan, zincirde, toplam
 
 ESP32, tarayıcı ve Soroban aynı baytları üretmek zorunda. JSON kullanma — anahtar sırası, boşluk, sayı biçimi üç yerde tutmaz.
 
-**Sabit uzunlukta, düz bayt dizisi:**
+**Sabit uzunlukta, düz bayt dizisi** (P4'te uygulandı, `docs/test-vector.md`):
 
 ```
 msg = "OFFGATE-RCPT-v1"   (15 bayt ASCII)
     || ent_hash            (32 bayt)
-    || gate_id             (16 bayt, sağdan \0 dolgulu ASCII)
     || seq                 (4 bayt, big-endian u32)
     || fare_try_kurus      (8 bayt, big-endian u64)
     || ts                  (8 bayt, big-endian u64)
-                           = 83 bayt sabit
+                           = 67 bayt sabit
 ```
 
-Bu formatı üç yerde de **kopyala-yapıştır aynı** yaz. Bir test vektörü (bilinen msg → bilinen imza) `docs/test-vector.md`'ye koy; ESP32'yi buna karşı doğrula.
+> **Kapı kimliği mesajda yok.** `ent_hash` zaten kapıyı bağlıyor (entitlement'ın
+> içinde). Böylece sözleşme tarafında `Symbol` → bayt dönüşümüne gerek kalmıyor —
+> Soroban'da `ToString for Symbol` yalnızca wasm **dışında** mevcut, yani kontrat
+> içinde kullanılamıyor. İlk taslaktaki 83 baytlık format bu yüzden 67'ye indi.
+
+Entitlement'ın kendi kanonik formatı 138 bayt (`"OFFGATE-ENT-v1"` öneki ile);
+`ent_hash` onun SHA-256'sıdır. Üç platformun da aynı baytı ürettiği
+`docs/test-vector.md` ile sabitlendi ve `cargo test -p offgate canonical`
+ile derleme zamanında zorlanıyor.
 
 `ent_hash` = entitlement'ın kanonik baytlarının SHA-256'sı (aynı mantık, `"OFFGATE-ENT-v1"` öneki ile).
 
@@ -597,16 +604,16 @@ Deploy: `vercel --prod`. Submission portalı: repo + canlı URL + deck + **track
 | K-1 | Fişleri cihaz anahtarı imzalar, cüzdan değil | Cüzdan uzantısı offline ham bayt imzalayamaz; zincir üstü yetki devri daha güvenli |
 | K-2 | Fişler online iken ön-imzalanır (fiş defteri) | Origin izolasyonu + Safari WebCrypto Ed25519 riski; seyahat çeki modeli |
 | K-3 | 500 TRY yükleme / 100 TRY geçiş | Anchor `min_offramp_usdc = 1.0` limitinin üstünde kalmak |
-| K-4 | Kanonik mesaj = sabit 83 bayt, JSON değil | Üç platformda (Rust/JS/C++) bayt-bayt aynı sonucu garanti etmek |
+| K-4 | Kanonik mesaj = sabit 67 bayt, JSON değil | Üç platformda (Rust/JS/C++) bayt-bayt aynı sonucu garanti etmek |
 | K-5 | Kapı ataması zincirde | Yük dengeleme ve çifte harcamanın tek kapıya bağlanması denetlenebilir olmalı |
 | K-6 | Vite+React, Next.js değil | SSR/polyfill riski yok, 3 sn build |
 | K-7 | Kamera/QR yok | `http://` origin'de tarayıcı kamerayı açmaz; sertifika işi saat yakar |
-| K-8 | Taşıma katmanı bağımsızlığı | Doğrulama sabit 83 bayt üzerinde; QR/BLE/NFC/mobil uygulama firmware ve sözleşme değişikliği gerektirmeden eklenebilir |
+| K-8 | Taşıma katmanı bağımsızlığı | Doğrulama sabit 67 bayt üzerinde; QR/BLE/NFC/mobil uygulama firmware ve sözleşme değişikliği gerektirmeden eklenebilir |
 
 ### K-8 ayrıntı — README "Yol haritası" bölümüne girecek metin
 
 > **Taşıma katmanı değiştirilebilir.**
-> Fiş doğrulaması, taşıma biçiminden bağımsız olarak tanımlanmış sabit 83 baytlık kanonik mesaj üzerinde çalışır (`docs/test-vector.md`). Kapı firmware'i baytların nereden geldiğini bilmez; bugün yerel wifi üzerinden HTTP POST ile geliyor, aynı baytlar değişiklik gerektirmeden QR kare, BLE karakteristiği veya NFC üzerinden de taşınabilir. Doğrulama, `seq` kontrolü ve `settle` yolu aynı kalır.
+> Fiş doğrulaması, taşıma biçiminden bağımsız olarak tanımlanmış sabit 67 baytlık kanonik mesaj üzerinde çalışır (`docs/test-vector.md`). Kapı firmware'i baytların nereden geldiğini bilmez; bugün yerel wifi üzerinden HTTP POST ile geliyor, aynı baytlar değişiklik gerektirmeden QR kare, BLE karakteristiği veya NFC üzerinden de taşınabilir. Doğrulama, `seq` kontrolü ve `settle` yolu aynı kalır.
 >
 > QR bu sürümde bilinçli olarak kapsam dışı: tarayıcılar güvenli olmayan origin'de (`http://192.168.4.1`) kamerayı açmıyor. Bu bir mimari sınır değil, tarayıcı kısıtı — native mobil uygulamada geçerli değil. Mobil uygulama bu nedenle web akışının yerine geçmez, yanına **ikinci bir taşıma katmanı** olarak eklenir; sözleşme ve firmware tarafında değişiklik gerektirmez.
 

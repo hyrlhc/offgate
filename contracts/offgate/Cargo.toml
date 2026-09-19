@@ -13,3 +13,6 @@ soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# Testlerde gercek Ed25519 imzasi uretmek icin. Kontrat koduna girmez.
+ed25519-dalek = "2"
+hex = "0.4"

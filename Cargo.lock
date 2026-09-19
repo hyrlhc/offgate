@@ -1160,6 +1160,8 @@ dependencies = [
 name = "offgate"
 version = "0.0.0"
 dependencies = [
+ "ed25519-dalek",
+ "hex",
  "soroban-sdk",
 ]
 

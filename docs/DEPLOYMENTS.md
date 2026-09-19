@@ -162,3 +162,102 @@ Yayınlanan olaylar (`stellar contract invoke` çıktısından):
 | `assign_gate_picks_least_loaded` | En az yüklü kapı seçiliyor |
 | `assign_gate_fails_for_unknown_event` | Bilinmeyen etkinlik reddedilir |
 | `fare_conversion_matches_locked_rate` | Kur matematiği ve TL sabitliği |
+
+## Paket 4 — settle, refund ve denetim
+
+Kontrat `settle` + `refund` + denetim fonksiyonlarıyla yeniden deploy edildi.
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL |
+| Kayıtlı kapılar | `M307`, `M308`, `M309` (etkinlik `EVT1`) |
+
+### Uçtan uca testnet kanıtı — gerçek Ed25519 imzalarıyla
+
+```
+1. assign_gate(EVT1)                        -> "M307"     (yük dengeli seçim)
+2. lock_float(user, 10.0 USDC, ..., ent_hash) -> "M307"
+     float_of = 100000000   uses_left = 4
+
+3. settle(M307, [fiş 1, 2, 3])              -> 3 kabul
+     Settled olayı: accepted 3, submitted 3, amount 61494213
+     SAC transfer : kontrat -> operatör, 6.1494213 USDC
+
+4. settle(M307, [aynı 3 fiş])               -> 0 kabul     ← idempotanlık
+     Settled olayı: accepted 0, submitted 3, amount 0
+     Bakiye değişmedi.
+
+5. gate_report(M307, 3)
+   stats(EVT1)                              -> [3, 3, "61494213"]
+     beyan 3 = zincir 3  ✓ denetim tutuyor
+
+6. refund(user)                             -> 38505787   (3.8505787 USDC)
+     kontrat bakiyesi 0, kapı yükü 0
+     is_spent(ent_hash, 1) hâlâ true  ← eski fişler yeniden kullanılamaz
+```
+
+Kullanılan gerçek entitlement:
+```
+ent_hash  af3c43f2ea671f04d41fc77ad1fcf76940e4c1de2a427dd14227b277ef803713
+device_pk 98d1ab9592829c8f97ff9e730c777dc55b1e219c2817ce5cd983a83e39362ed8
+fare_try  10000 (100.00 TL)   rate 487850780 (1 USDC = 48.785078 TRY)
+```
+
+### K-3 doğrulandı
+
+Operatöre geçen 6.1494213 USDC, anchor'ın `min_offramp_usdc = 1.0` limitinin
+**üstünde**. Eski demo rakamlarıyla (50 TL / 5 TL) bu tutar 0.31 USDC olacak ve
+withdraw adımı çalışmayacaktı.
+
+### Güvenlik kararları
+
+- **`settle` idempotenttir.** Aynı fiş ikinci kez gelirse sessizce atlanır, batch
+  düşmez. Görevli aynı senkronizasyonu iki kez çalıştırabilir.
+- **Geçersiz imza batch'i durdurur.** Soroban'ın `ed25519_verify` fonksiyonu
+  başarısızlıkta panik atar, değer döndürmez. Kapı her fişi kabul anında
+  doğruladığı için normal akışta sahte fiş `settle`'a hiç ulaşmaz. Bu davranış
+  bilinçli: sahte fiş taşıyan bir batch sessizce kısmen işlenmez.
+- **Fiş, hesabın kapısına bağlıdır.** Başka kapının fişi sayılmaz; `ent_hash`
+  tutmayan fiş sayılmaz; `fare_try` oynatılmış fiş imza doğrulamasında düşer.
+- **`refund` sonrası `Spent` kayıtları silinmez.** Aynı entitlement ile yeniden
+  kilitlense bile eski fişler harcanmış sayılır (test:
+  `refund_keeps_spent_receipts_unusable_after_relock`).
+- **Yük dengesi zincirde zorlanıyor.** `lock_float`, seçilen kapının yükünün
+  en az yüklü kapıdan `GATE_LOAD_TOLERANCE = 2`'den fazla yüksek olmasına izin
+  vermez. Tolerans, eşzamanlı isteklerdeki yarışa alan bırakır.
+
+### Kanonik format (karar K-4)
+
+Fiş imzası **sabit 67 bayt** üzerinde: `"OFFGATE-RCPT-v1"` (15) + `ent_hash` (32)
++ `seq` (4, BE) + `fare_try` (8, BE) + `ts` (8, BE).
+
+Kapı kimliği mesajda yok — `ent_hash` zaten kapıyı bağlıyor. Bu sayede sözleşmede
+`Symbol` → bayt dönüşümüne gerek kalmıyor (Soroban'da `ToString for Symbol`
+yalnızca wasm dışında mevcut).
+
+Rust ve JavaScript'in aynı baytı ve aynı imzayı ürettiği
+[docs/test-vector.md](test-vector.md) ile sabitlendi; `cargo test -p offgate canonical`
+bunu derleme zamanında zorluyor. ESP32 firmware'i (P8c) aynı vektöre karşı
+doğrulanacak.
+
+### Testler
+
+`cargo test -p offgate` → **26/26 geçiyor**, gerçek Ed25519 imzalarıyla
+(`ed25519-dalek`, yalnızca dev-dependency).
+
+Öne çıkanlar:
+
+| Test | Ne kanıtlıyor |
+|---|---|
+| `settle_accepts_valid_receipts_and_pays_operator` | Ana akış, hasılat operatöre geçiyor |
+| `settle_is_idempotent_for_repeated_batches` | Mükerrer gönderim zararsız |
+| `settle_rejects_replayed_sequence_number` | Tekrar saldırısı `seq` ile engelli |
+| `settle_rejects_forged_signature` | Başka anahtarla imzalı fiş batch'i durduruyor |
+| `settle_rejects_tampered_amount` | Ücret oynatma imzada düşüyor |
+| `settle_skips_receipts_from_another_gate` | Fiş tek kapıya bağlı |
+| `settle_stops_when_balance_is_exhausted` | 6 fiş gönderildi, 4'ü kabul |
+| `refund_keeps_spent_receipts_unusable_after_relock` | İade sonrası eski fişler ölü |
+| `lock_float_enforces_load_balance_on_chain` | Yük dengesi zincirde zorunlu |
+| `stats_reveal_underreporting_gate` | Eksik beyan denetimde görünüyor |
+| `canonical_message_matches_javascript_vector` | Rust ve JS bayt-bayt aynı |

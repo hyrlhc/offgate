@@ -17,10 +17,12 @@ Organizatör TL olarak tahsil eder.
 | P1 Zincir kimliği + deploy | ✅ |
 | P2 Anchor akışı (SEP-1/10/38/6) | ✅ |
 | P3 Kontrat v1 (lock_float, assign_gate) | ✅ |
-| P4 Kontrat v2 (settle, refund) | ⏳ sırada |
-| P5–P13 | ⬜ |
+| P4 Kontrat v2 (settle, refund, denetim) | ✅ |
+| P5 Kontrat testleri | ✅ (26 test) |
+| P6 Web — online akış | ⏳ sırada |
+| P7–P13 | ⬜ |
 
-**Contract ID:** `CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR` (testnet)
+**Contract ID:** `CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL` (testnet)
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
 ## Dokümanlar
@@ -28,6 +30,7 @@ Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 - [docs/OFFGATE-BUILD-PLAN.md](docs/OFFGATE-BUILD-PLAN.md) — mimari, veri yapıları, anchor referansı
 - [docs/OFFGATE-PACKAGES.md](docs/OFFGATE-PACKAGES.md) — paket paket geliştirme planı ve karar kayıtları
 - [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) — contract ID, hesaplar, işlem hash'leri
+- [docs/test-vector.md](docs/test-vector.md) — kanonik imza formatı, platformlar arası test vektörü
 
 ## Hızlı başlangıç
 
