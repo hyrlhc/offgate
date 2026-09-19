@@ -112,10 +112,13 @@ body{margin:0;background:#0d1117;color:#e6edf3;font:16px -apple-system,system-ui
 .no{background:#2a1215;border:2px solid #f85149;color:#ff7b72}
 .idle{color:#8b95a5;border:2px solid #2b3440}
 .det{color:#8b95a5;font-size:12px;margin-top:12px;font-family:ui-monospace,Menlo,monospace}
+.mesh{margin-top:22px;color:#58a6ff;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+.mesh b{color:#e6edf3;font-weight:600}
 </style></head><body><div>
 <div class="gate">%GATE%</div>
 <div class="big">%COUNT%</div>
 <div class="lbl">gecis</div>
 <div class="st %CLS%">%STATUS%</div>
 <div class="det">%DETAIL%</div>
+<div class="mesh">%MESH%</div>
 </div></body></html>)HTML";

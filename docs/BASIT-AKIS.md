@@ -402,3 +402,75 @@ Yine de bu bir arayüz hatasıydı. Artık bilet ekranında **bilet kodu** var:
 `ent_hash`'in ilk 10 hanesi, `B30C-9BCE-15` biçiminde. Her bilete özel.
 Yanında sahibi olan cüzdan ve fişleri imzalayan cihaz anahtarı da yazıyor.
 Ham paket katlanmış bir kutuya alındı.
+---
+
+## 14. Kapılar arası iletişim — ESP-NOW
+
+İki turnike birbirine **doğrudan** konuşur. Router yok, internet yok,
+eşleşme yok. ESP-NOW, iki ESP32'nin 2.4 GHz'de birbirine çerçeve göndermesidir.
+
+### Her kapının artık kimliği var
+
+İlk açılışta kendi Ed25519 anahtar çiftini üretir, NVS'e yazar, açık anahtarını
+seri porta basar. Söylediği her şeyi bu anahtarla imzalar.
+
+Bu, sistemdeki **dördüncü** anahtar — ve turnikenin ilk kez bir şey imzalaması.
+Önceden yalnızca doğruluyordu.
+
+### Ne yayıyor
+
+Bir geçiş kabul edildiğinde:
+
+```
+"OFFGATE-GOSSIP-v1"(17) || gate(16) || ent_hash(32) || seq(4)
+  || counter(4) || ts(8)                                        = 81 bayt
++ imza(64) + açık anahtar(32)                                   = 177 bayt
+```
+
+Okunuşu: *"Ben M307'yim, şu biletin şu numaralı geçişini harcadım, sayacım şu."*
+
+Komşu imzayı doğrular ve kendi defterine **harcanmış** olarak yazar.
+
+### Neden güvenli
+
+Yayılan şey bir **harcama kaydı**. Bir kapıya "bu fiş harcandı" demek onun
+yalnızca daha fazla **reddetmesine** yol açabilir — hiçbir mesaj kimseye geçiş
+hakkı kazandıramaz. Bu, protokolün güvenliğini tek yönlü kılıyor: komşudan
+gelen veriyi kabul etmenin en kötü sonucu fazladan bir ret.
+
+Sahte mesaj üretmek için komşunun gizli anahtarı gerekir, o da hiçbir yere
+çıkmaz.
+
+### Ne kazandırıyor
+
+**Dayanıklılık.** Bir kapının hafızası silinse komşusunda kaydı durur.
+
+**Denetimin temeli.** Kapının artık kimliği var ve gördüğünü imzalıyor.
+Operatörün beyanına güvenmek zorunda kalmamanın ilk adımı bu.
+
+**Dağıtık defter.** Her kapı, ağın gördüğü geçişlerin imzalı bir kopyasını
+tutar. Kullanıcıların bu veriyi zincire taşıması fikri buradan besleniyor.
+
+**Canlı komşu farkındalığı.** Kapı ekranı `komşu: M308 12 geçiş, 3sn önce`
+yazıyor — internet olmadan.
+
+### Uygulama notları
+
+- İki kapı da **aynı kanalda** olmalı; ESP-NOW kanal atlamaz. AP'ler kanal 1'e
+  sabitlendi.
+- ESP-NOW geri çağrısı kesme bağlamında çalışır: orada NVS'e yazmıyoruz.
+  Paket kuyruğa alınıp `loop()` içinde doğrulanıyor.
+- `/peers` ucu kapının kimliğini ve tanıdığı komşuları döndürür.
+- Trafik olmasa da 15 saniyede bir "buradayım" duyurusu gider.
+
+### Sınır (dürüstçe)
+
+Komşunun açık anahtarı **ilk duyulduğunda sabitleniyor**
+(trust-on-first-use). Sonradan değişirse reddediliyor. Kapalı bir demo ağı
+için yeterli; üretimde kapı anahtarları `register_gate` ile sözleşmeye
+kaydedilip oradan dağıtılmalı.
+
+Ayrıca bu sürümde bilet hâlâ **tek kapıya bağlı**. Gossip, biletin başka
+kapıda kullanılmasını sağlamaz — yalnızca harcama kayıtlarını çoğaltır.
+Kapılar arası serbest geçiş, ağ bölünmesinde çifte harcama açar; onu çözmek
+ayrı bir iş.

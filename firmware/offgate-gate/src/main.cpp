@@ -18,6 +18,7 @@
 #include "offgate.h"
 #include "pages.h"
 #include "selftest.h"
+#include "mesh.h"
 
 // --- Yapilandirma ----------------------------------------------------------
 
@@ -99,6 +100,21 @@ static void store_receipt(const String &json) {
 }
 
 // --- Gosterge --------------------------------------------------------------
+
+/**
+ * Komsu kapinin duyurdugu harcama kaydi.
+ *
+ * Yalnizca "bu fis harcandi" bilgisini yaziyoruz. Bu kayit bir gecis
+ * KAZANDIRAMAZ, yalnizca ileride ayni fisin kabul edilmesini engeller —
+ * bu yuzden komsudan gelen veriyi kabul etmek guvenlidir.
+ */
+static void mesh_spent_heard(const uint8_t ent_hash[32], uint32_t seq, const char *from) {
+  if (is_spent(ent_hash, seq)) return;
+  mark_spent(ent_hash, seq);
+  char h[17];
+  bytes_to_hex(ent_hash, 8, h);
+  Serial.printf("[mesh] %s harcamis: %s #%u — deftere yazildi\n", from, h, seq);
+}
 
 static void flash(int pin) {
   digitalWrite(LED_OK, LOW);
@@ -262,12 +278,39 @@ static void handle_pay() {
   store_receipt(stored);
 
   accept(String("fis #") + r.seq + " / " + ent.max_uses);
+
+  // Komsu kapilara imzali harcama kaydi — router yok, internet yok.
+  mesh_broadcast(GATE_ID, r.ent_hash, r.seq, g_counter, r.ts);
   send_json(200, String("{\"ok\":true,\"seq\":") + r.seq +
                      ",\"left\":" + (ent.max_uses - r.seq) +
                      ",\"counter\":" + g_counter + "}");
 }
 
 // --- Diger uclar -----------------------------------------------------------
+
+/** Kapinin kimligi ve tanidigi komsular. Tamamen yerel, internet gerekmez. */
+static void handle_peers() {
+  char pk_hex[65];
+  bytes_to_hex(g_gate_pk, 32, pk_hex);
+  String out = String("{\"gate\":\"") + GATE_ID + "\",\"pk\":\"" + pk_hex +
+               "\",\"counter\":" + g_counter +
+               ",\"sent\":" + g_mesh_sent + ",\"recv\":" + g_mesh_recv +
+               ",\"peers\":[";
+  bool first = true;
+  for (int i = 0; i < MESH_MAX_PEERS; i++) {
+    if (!g_peers[i].used) continue;
+    char peer_pk[65];
+    bytes_to_hex(g_peers[i].pk, 32, peer_pk);
+    if (!first) out += ",";
+    first = false;
+    out += String("{\"gate\":\"") + g_peers[i].gate + "\",\"pk\":\"" + peer_pk +
+           "\",\"counter\":" + g_peers[i].counter +
+           ",\"records\":" + g_peers[i].records +
+           ",\"heard_ms_ago\":" + (millis() - g_peers[i].heard) + "}";
+  }
+  out += "]}";
+  send_json(200, out);
+}
 
 static void handle_root() {
   http.sendHeader("Cache-Control", "no-store");
@@ -278,6 +321,17 @@ static void handle_screen() {
   String page = FPSTR(PAGE_SCREEN);
   page.replace("%GATE%", GATE_ID);
   page.replace("%COUNT%", String(g_counter));
+
+  // Komsu kapilar — internet yok, bu bilgi dogrudan ESP-NOW'dan geliyor.
+  String mesh = "";
+  for (int i = 0; i < MESH_MAX_PEERS; i++) {
+    if (!g_peers[i].used) continue;
+    uint32_t ago = (millis() - g_peers[i].heard) / 1000;
+    if (mesh.length()) mesh += " &middot; ";
+    mesh += String("<b>") + g_peers[i].gate + "</b> " + g_peers[i].counter +
+            " gecis, " + ago + "sn once";
+  }
+  page.replace("%MESH%", mesh.length() ? ("komsu: " + mesh) : "komsu kapi duyulmadi");
   page.replace("%STATUS%", g_status);
   page.replace("%CLS%", g_status_class);
   page.replace("%DETAIL%", g_detail);
@@ -339,9 +393,12 @@ void setup() {
   g_counter = nvs.getUInt("counter", 0);
   g_receipt_count = nvs.getUInt("rcount", 0);
 
+  // Kanal sabit: ESP-NOW kanal atlamaz, iki kapi ayni kanalda olmali.
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID);
+  WiFi.softAP(AP_SSID, nullptr, MESH_CHANNEL);
   IPAddress ip = WiFi.softAPIP();
+
+  bool mesh_ok = mesh_begin(nvs, mesh_spent_heard);
 
   // Tum DNS sorgularini kendine yonlendir — captive portal boyle acilir.
   dns.setErrorReplyCode(DNSReplyCode::NoError);
@@ -353,6 +410,7 @@ void setup() {
   http.on("/receipts", handle_receipts);
   http.on("/reset", handle_reset);
   http.on("/health", handle_health);
+  http.on("/peers", handle_peers);
   http.onNotFound(handle_not_found);
   http.begin();
 
@@ -364,11 +422,23 @@ void setup() {
   Serial.printf("  sayac    : %u gecis, %u fis saklı\n", g_counter, g_receipt_count);
   Serial.printf("  internet : YOK — dogrulama tamamen yerel\n");
   Serial.printf("  oz-test  : %s\n", self_ok ? "GECTI" : "BASARISIZ — format uyusmuyor!");
+  char pk_hex[65];
+  bytes_to_hex(g_gate_pk, 32, pk_hex);
+  Serial.printf("  kimlik   : %s\n", pk_hex);
+  Serial.printf("  komsuluk : %s (ESP-NOW, kanal %u)\n",
+                mesh_ok ? "acik" : "KAPALI", MESH_CHANNEL);
 }
 
 void loop() {
   dns.processNextRequest();
   http.handleClient();
+
+  // Komsulardan gelen imzali kayitlar — kesme baglaminda degil, burada islenir.
+  mesh_pump(GATE_ID);
+  if (millis() - g_last_announce > MESH_ANNOUNCE_MS) {
+    g_last_announce = millis();
+    mesh_announce(GATE_ID, g_counter);
+  }
 
   if (g_led_pin >= 0 && millis() > g_led_until) {
     digitalWrite(g_led_pin, LOW);
