@@ -88,8 +88,20 @@ static bool is_spent(const uint8_t ent_hash[32], uint32_t seq) {
   return nvs.isKey(spent_key(ent_hash, seq).c_str());
 }
 
-static void mark_spent(const uint8_t ent_hash[32], uint32_t seq) {
-  nvs.putBool(spent_key(ent_hash, seq).c_str(), true);
+/**
+ * Fisi harcanmis isaretle.
+ *
+ * Donus degeri kontrol EDILMEK zorunda. NVS dolduysa yazma sessizce
+ * basarisiz olur; o durumda kapi "yaktim" sanip gecis verirse ayni fis
+ * ikinci kez kullanilabilir. Yani bu tek satirlik kontrol, cifte harcamayi
+ * durduran seyin ta kendisi. Yakamiyorsak geciremeyiz.
+ */
+static bool mark_spent(const uint8_t ent_hash[32], uint32_t seq) {
+  if (nvs.putBool(spent_key(ent_hash, seq).c_str(), true) == 0) {
+    Serial.println("[defter] NVS yazilamadi — FIS YAKILAMADI, gecis verilemez");
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -127,7 +139,7 @@ static bool store_receipt(const String &json) {
  */
 static void mesh_spent_heard(const uint8_t ent_hash[32], uint32_t seq, const char *from) {
   if (is_spent(ent_hash, seq)) return;
-  mark_spent(ent_hash, seq);
+  if (!mark_spent(ent_hash, seq)) return;
   char h[17];
   bytes_to_hex(ent_hash, 8, h);
   Serial.printf("[mesh] %s harcamis: %s #%u — deftere yazildi\n", from, h, seq);
@@ -182,7 +194,14 @@ static uint8_t mesh_ask_heard(const uint8_t ent_hash[32], uint32_t seq, const ch
     return VERDICT_SPENT;
   }
 
-  mark_spent(ent_hash, seq);   // once yak, sonra onayla
+  if (!mark_spent(ent_hash, seq)) {   // once yak, sonra onayla
+    Serial.printf("[mesh] %s sordu: %s #%u — YAKILAMADI, onay verilmedi\n", from, h, seq);
+    g_status = "UZAKTAN RED";
+    g_status_class = "no";
+    g_detail = "defter yazilamadi";
+    flash(LED_NO);
+    return VERDICT_NOPE;
+  }
   Serial.printf("[mesh] %s sordu: %s #%u — YAKILDI, onay verildi\n", from, h, seq);
   g_status = "UZAKTAN ONAY";
   g_status_class = "ok";
@@ -328,8 +347,11 @@ static String process_pay(const String &body) {
     Serial.printf("[mesh] %s onay verdi (%u ms)\n", ent.gate, waited);
   }
 
-  // 10. Kabul: once harca, sonra sakla.
-  mark_spent(r.ent_hash, r.seq);
+  // 10. Kabul: once harca, sonra sakla. Harcayamiyorsak geciremeyiz —
+  // aksi halde ayni fis ikinci kez kullanilabilir.
+  if (!mark_spent(r.ent_hash, r.seq)) {
+    return deny("ledger_full", "Kapi defteri dolu — gorevliye bildirin");
+  }
 
   char eh[65], sg[129];
   bytes_to_hex(r.ent_hash, 32, eh);
