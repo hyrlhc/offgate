@@ -27,7 +27,7 @@ Organizatör TL olarak tahsil eder.
 | P11 Uçtan uca prova | ⏳ sırada |
 | P12–P13 | ⬜ |
 
-**Contract ID:** `CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL` (testnet)
+**Contract ID:** `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` (testnet)
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
 ## Dokümanlar

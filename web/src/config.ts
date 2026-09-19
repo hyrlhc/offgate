@@ -18,7 +18,7 @@ export const CONFIG = {
   usdcCode: env.VITE_USDC_CODE ?? 'USDC',
   usdcIssuer: env.VITE_USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-  contractId: env.VITE_CONTRACT_ID ?? 'CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL',
+  contractId: env.VITE_CONTRACT_ID ?? 'CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD',
 
   // Operator imza ucunun koku. Tarayicida bos (ayni origin); tarayicisiz
   // uctan uca testte gelistirme sunucusunun adresi verilir.
@@ -29,7 +29,10 @@ export const CONFIG = {
   readAccount: env.VITE_READ_ACCOUNT ?? 'GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ',
 
   // Demo parametreleri — karar K-3 (docs/OFFGATE-PACKAGES.md)
-  eventId: env.VITE_EVENT_ID ?? 'EVT1',
+  // Demo etkinligi: yalnizca M307 kayitli, boylece assign_gate her zaman
+  // elimizdeki fiziksel kapiyi donduruyor ve prova tekrarlanabilir oluyor.
+  // Yuk dengeleme kodu aynen duruyor; EVT1 gecmisi ve unit testler kaniti.
+  eventId: env.VITE_EVENT_ID ?? 'FEST26',
   depositTry: env.VITE_DEPOSIT_TRY ?? '500',
   fareTryKurus: Number(env.VITE_FARE_TRY_KURUS ?? 10_000),
   maxUses: Number(env.VITE_MAX_USES ?? 5),

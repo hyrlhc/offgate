@@ -3,14 +3,14 @@
 > Hepsi **Stellar Testnet**. Gerçek para yok.
 > Network passphrase: `Test SDF Network ; September 2015`
 
-Son güncelleme: 19 Eylül 2026 — Paket 3 sonu
+Son güncelleme: 19 Eylül 2026 — Paket 10 sonu
 
 ## Kontrat
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR |
+| **Contract ID** | `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD |
 | Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
 | `init` tx | P3 deploy'u ile birlikte yenilendi |
 | soroban-sdk | 27 · hedef `wasm32v1-none` |
@@ -341,3 +341,32 @@ Web uygulamasında `#audit`. Zincirden okunan canlı veri:
 
 Kapı sayacı `gate_report` ile, fişler `settle` ile zincire yazılır. İki sayı
 bağımsız kaynaklardan gelir; operatör yalnızca birini eksiltemez.
+
+## Demo dağıtımı — temiz başlangıç
+
+Sözleşme son kez deploy edildi; demo bu adres üzerinden çalışır.
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD |
+| Demo etkinliği | `FEST26` |
+| Kayıtlı kapı | `M307` (fiziksel ESP32) |
+
+### Neden yeni bir dağıtım
+
+Kapı sayaçları (`Declared`, `Settled`) kapı bazında tutuluyor. Aynı kapı iki
+etkinlikte kayıtlı olsaydı `stats` bir etkinliğin geçişlerini diğerine de sayar
+ve denetim ekranı yanlış sonuç verirdi — bunu `FEST26` kurarken bizzat gördük:
+M307 hem `EVT1`'de hem `FEST26`'da kayıtlıydı ve `EVT1`'in 3 geçişi `FEST26`'nın
+denetiminde göründü.
+
+Sözleşmeye `GateEvent` eşlemesi eklendi: **bir kapı yalnızca tek bir etkinliğe
+ait olabilir**, ikinci kayıt reddedilir. Böylece kapı bazlı sayaçlar
+tek anlamlı hale geldi. Kural `gate_belongs_to_exactly_one_event` testiyle ve
+testnet'te elle doğrulandı.
+
+Demo etkinliğinde tek kapı kayıtlı olduğu için `assign_gate` her zaman `M307`
+döndürür ve prova tekrarlanabilir. Yük dengeleme kodu aynen duruyor;
+`assign_gate_spreads_load_evenly` ve `lock_float_enforces_load_balance_on_chain`
+testleri kanıtı.

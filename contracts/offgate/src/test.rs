@@ -146,6 +146,30 @@ fn register_gate_adds_once_and_rejects_duplicate() {
     assert_eq!(f.client.gates_of(&EVT).len(), 2);
 }
 
+/// Bir kapi iki etkinlige birden kayitli olamaz.
+///
+/// Sayaclar (Declared/Settled) kapi bazinda tutuluyor; ayni kapi iki
+/// etkinlikte olsaydi `stats` bir etkinligin gecislerini digerine de
+/// sayar ve denetim ekrani yanlis sonuc verirdi.
+#[test]
+fn gate_belongs_to_exactly_one_event() {
+    let f = setup();
+    let other = Symbol::new(&f.e, "FEST26");
+
+    f.client.register_gate(&EVT, &G1);
+    assert_eq!(f.client.event_of(&G1), Some(EVT));
+
+    assert!(
+        f.client.try_register_gate(&other, &G1).is_err(),
+        "ayni kapi ikinci bir etkinlige kaydedilememeli"
+    );
+    assert_eq!(f.client.gates_of(&other).len(), 0);
+
+    // Farkli bir kapi o etkinlige girebilir.
+    f.client.register_gate(&other, &G2);
+    assert_eq!(f.client.event_of(&G2), Some(other));
+}
+
 // --- lock_float ------------------------------------------------------------
 
 #[test]

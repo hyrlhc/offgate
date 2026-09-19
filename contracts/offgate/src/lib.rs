@@ -56,6 +56,10 @@ pub enum DataKey {
     Gates(Symbol),
     /// Kapinin uzerindeki kullanici yuku (yuk dengeli atama icin).
     GateLoad(Symbol),
+    /// Kapinin bagli oldugu etkinlik. Bir kapi yalnizca tek bir etkinlige
+    /// ait olabilir: sayaclar kapi bazinda tutuldugu icin, ayni kapi iki
+    /// etkinlikte kayitli olsaydi `stats` yanlis sayi dondururdu.
+    GateEvent(Symbol),
     /// Kullanicinin kilitli bakiyesi ve bilet parametreleri.
     Acct(Address),
     /// Harcanmis fis: (entitlement hash, sira no). Tekrar saldirisini onler.
@@ -117,7 +121,7 @@ pub enum Error {
     NotInitialized = 2,
     /// Etkinlige kayitli kapi yok.
     NoGates = 3,
-    /// Kapi bu etkinlikte zaten kayitli.
+    /// Kapi zaten kayitli — ayni ya da baska bir etkinlikte.
     GateExists = 4,
     /// Tutar, ucret veya kur sifir ya da negatif.
     InvalidAmount = 5,
@@ -253,16 +257,18 @@ impl OffGate {
     pub fn register_gate(e: Env, event: Symbol, gate: Symbol) -> Result<(), Error> {
         cfg_address(&e, DataKey::Admin)?.require_auth();
 
+        // Bir kapi yalnizca tek bir etkinlige ait olabilir (bkz. GateEvent).
+        let owner_key = DataKey::GateEvent(gate.clone());
+        if e.storage().persistent().has(&owner_key) {
+            return Err(Error::GateExists);
+        }
+
         let gates_key = DataKey::Gates(event.clone());
         let mut gates: Vec<Symbol> = e
             .storage()
             .persistent()
             .get(&gates_key)
             .unwrap_or_else(|| Vec::new(&e));
-
-        if gates.iter().any(|g| g == gate) {
-            return Err(Error::GateExists);
-        }
         gates.push_back(gate.clone());
         e.storage().persistent().set(&gates_key, &gates);
         bump(&e, &gates_key);
@@ -270,6 +276,9 @@ impl OffGate {
         let load_key = DataKey::GateLoad(gate.clone());
         e.storage().persistent().set(&load_key, &0u32);
         bump(&e, &load_key);
+
+        e.storage().persistent().set(&owner_key, &event);
+        bump(&e, &owner_key);
 
         GateRegistered { event, gate }.publish(&e);
         Ok(())
@@ -523,6 +532,11 @@ impl OffGate {
 
     pub fn gate_load(e: Env, gate: Symbol) -> u32 {
         e.storage().persistent().get(&DataKey::GateLoad(gate)).unwrap_or(0)
+    }
+
+    /// Kapinin bagli oldugu etkinlik.
+    pub fn event_of(e: Env, gate: Symbol) -> Option<Symbol> {
+        e.storage().persistent().get(&DataKey::GateEvent(gate))
     }
 
     pub fn gates_of(e: Env, event: Symbol) -> Vec<Symbol> {
