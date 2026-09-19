@@ -42,6 +42,8 @@ export type Bundle = {
   event: string;
   gate: string;
   user: string;
+  /** Kullanicinin ham Ed25519 acik anahtari — ESP32 entitlement'i bununla dogrular. */
+  user_raw: string;
   device_pk: string;
   fare_try: number;
   rate: number;
@@ -162,6 +164,7 @@ export async function runTopUp(signer: Signer, emit: Emit): Promise<Ticket> {
     event: entitlement.event,
     gate,
     user: signer.address,
+    user_raw: toHex(entitlement.userRaw),
     device_pk: toHex(device.publicKey),
     fare_try: entitlement.fareTry,
     rate,
