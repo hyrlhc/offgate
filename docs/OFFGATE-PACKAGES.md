@@ -630,3 +630,46 @@ Deploy: `vercel --prod`. Submission portalı: repo + canlı URL + deck + **track
 5. ESP32 Ed25519 → B planı (Node doğrulama + seri port)
 
 **Asla kesilmeyecekler:** SEP-10/38/6 gerçek akış · `lock_float` + `require_auth` · `settle` + çifte harcama reddi · offline geçiş gösterimi · README.
+
+---
+
+### K-9 · Geçiş hakkı istemciden alınamaz → **Operatör imzayı zincirden doğrular**
+
+**Sorun.** İlk kurguda sıra şöyleydi: istemci entitlement'ı hazırlar → operatör
+imzalar → bakiye zincire kilitlenir. Operatör, istemcinin gönderdiği
+`maxUses`'i hiç sorgulamadan imzalıyordu. Kapı ise bakiyeyi hiç görmez;
+tek sınırı entitlement'taki `max_uses`'tir (`main.cpp`: `r.seq > ent.max_uses`).
+
+Sözleşme de bu boşluğu kapatmıyordu: `lock_float` yalnızca
+`amount >= bir geçiş` kontrolü yapar. Yani kurcalanmış bir istemci
+100 TL kilitleyip 50 geçişlik imzalı bilet alabilir, kapıdan 50 kez geçer,
+`settle` yalnızca 1 fişi kabul eder — kalan 49 geçişin bedelini organizatör yer.
+Para zincirde kaybolmaz; kaybedilen turnike geçişidir.
+
+**Neden sözleşmede çözülemedi.** En temiz çözüm, `lock_float`ın entitlement
+özetini kendisi hesaplayıp `ent_hash` ile karşılaştırması olurdu. Ama
+entitlement baytları `event` ve `gate` kimliklerini 16 baytlık metin olarak
+taşıyor ve `Symbol` → bayt dönüşümü `no_std` wasm hedefinde yok — K-4'te
+fişin 83 bayttan 67 bayta inmesine yol açan aynı kısıt.
+
+**Çözüm — sırayı ters çevir.** Önce kilit, sonra imza:
+
+1. İstemci `max_uses`'i kilitlenecek tutardan hesaplar, `ent_hash`'i üretir ve
+   `lock_float` ile zincire yazar.
+2. Operatör imza ucu **zinciri okur** (`account_of`) ve entitlement'ı oradaki
+   değerlerden yeniden kurar: kapı, ücret, kur, cihaz anahtarı zincirden;
+   `max_uses` ise `kilitli bakiye / bir geçiş`.
+3. Ürettiği özet zincirdeki `ent_hash` ile **birebir tutmalı**. Tutmazsa imza
+   verilmez.
+
+İstemci artık gövdede yalnızca `{ user, expires }` gönderiyor. Bakiye, ücret,
+kur, geçiş hakkı — hiçbiri istemciden alınmıyor. Kurcalanan her alan özeti
+değiştirir, özet tutmazsa imza çıkmaz, imzasız bileti kapı kabul etmez.
+
+Ek olarak imza ucu 48 saatten uzun bilet imzalamıyor.
+
+**Yan bulgu.** Eski kurguda `max_uses` sabit 5'ti ama 500 TL gerçekte
+**4 geçiş** alıyor (anchor alış kuru ile SEP-38 ücret kuru arasındaki makas).
+Yani dürüst kullanıcıya bile ödemediği bir geçiş veriliyordu. Geçiş hakkı artık
+kilitlenen bakiyeden türetiliyor; arayüzdeki önizleme de makası hesaba katıp
+aşağı yuvarlıyor.

@@ -9,8 +9,8 @@ Son güncelleme: 19 Eylül 2026 — Paket 10 sonu
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
+| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
 | Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
 | `init` tx | P3 deploy'u ile birlikte yenilendi |
 | soroban-sdk | 27 · hedef `wasm32v1-none` |
@@ -348,8 +348,8 @@ Sözleşme son kez deploy edildi; demo bu adres üzerinden çalışır.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
+| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
 | Demo etkinliği | `FEST26` |
 | Kayıtlı kapı | `M307` (fiziksel ESP32) |
 
@@ -377,8 +377,8 @@ testleri kanıtı.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
+| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
 | Etkinlik | `FEST26` |
 | Kayıtlı kapılar | `M307` (Kapı 1) · `M308` (Kapı 2) — iki fiziksel ESP32 |
 
@@ -414,3 +414,51 @@ Web arayüzünden **Kapı 2** seçilerek uçtan uca akış çalıştırıldı:
 Seçim `lock_float`ın kendi argümanı olarak zincire gidiyor; bakiye o kapıya
 kilitleniyor, entitlement o kapı için imzalanıyor, fişler başka kapıda kabul
 edilmiyor. `assign_gate` yalnızca varsayılan öneri olarak duruyor.
+
+---
+
+## Temiz dağıtım + K-9 güvenlik düzeltmesi
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
+| Etkinlik | `FEST26` — kapılar `M307` (Kapı 1), `M308` (Kapı 2), ikisi de sıfır yük |
+
+Önceki dağıtımlardaki test kilitleri `refund` gerektiriyordu ve o cüzdanların
+anahtarları tek kullanımlık tarayıcı oturumlarındaydı. Temiz başlangıç için
+yeniden dağıttık.
+
+### Doğrulanan davranışlar
+
+| Test | Beklenen | Sonuç |
+|---|---|---|
+| 250 TL yükle, Kapı 1 | 2 geçiş, yük M307'ye | ✓ |
+| 700 TL yükle, Kapı 2 | 6 geçiş, yük M308'e | ✓ |
+| İstemci gövdesi | yalnızca `{ user, expires }` | ✓ |
+| Gövdeye `maxUses: 999` enjekte et | yok sayılsın | ✓ `max_uses: 6` döndü |
+| Entitlement'ı zincirdekinden saptır | imza verilmesin | ✓ HTTP 409 |
+| 48 saatten uzun bilet iste | reddedilsin | ✓ "gecersiz bilet suresi" |
+
+Üretimde de doğrulandı:
+
+```
+POST https://offgate.vercel.app/api/sign-entitlement
+{"user":"GCWN…5NL6","expires":1789925817,"maxUses":999}
+-> {"ent_hash":"8855afda…","max_uses":6,...}
+```
+
+### Geçiş hakkı önizlemesi
+
+TL / ücret **değil**. TL, anchor'ın alış kuruyla USDC'ye çevrilir; ücret ise
+SEP-38 kuruyla USDC olarak hesaplanır. Aradaki makas kadar kayıp olur:
+
+| Yüklenen | Naif hesap | Gerçek |
+|---|---|---|
+| 250 TL | 2 | 2 |
+| 500 TL | 5 | **4** |
+| 700 TL | 7 | **6** |
+| 1000 TL | 10 | 9 |
+
+Arayüz %1.5 pay bırakıp aşağı yuvarlıyor ve "≈" ile gösteriyor; kesin sayı kur
+kilitlendikten sonra bilette yazıyor.

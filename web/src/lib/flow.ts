@@ -9,7 +9,9 @@ import { CONFIG } from '../config.ts';
 import {
   depositExchange, discover, makeSession, requestQuote, simulateBankTransfer, waitForCompletion,
 } from './anchor.ts';
-import { contractErrorMessage, ensureTrustline, lockFloat, usdcToStroops } from './contract.ts';
+import {
+  contractErrorMessage, ensureTrustline, fareInStroops, lockFloat, usdcToStroops,
+} from './contract.ts';
 import {
   buildReceiptBook, entitlementHash, loadOrCreateDeviceKey, toHex, type Entitlement, type SignedReceipt,
 } from './receipts.ts';
@@ -31,8 +33,8 @@ export const INITIAL_STEPS: Step[] = [
   { id: 'deposit', label: 'Ödeme talimatı alındı', detail: 'SEP-6', state: 'bekliyor' },
   { id: 'bank', label: 'Banka transferi alındı', state: 'bekliyor' },
   { id: 'settled', label: 'USDC hesabınıza geçti', state: 'bekliyor' },
-  { id: 'entitlement', label: 'Bilet imzalandı', state: 'bekliyor' },
   { id: 'lock', label: 'Bakiye zincire kilitlendi', state: 'bekliyor' },
+  { id: 'entitlement', label: 'Bilet imzalandı', detail: 'zincirden doğrulandı', state: 'bekliyor' },
   { id: 'book', label: 'Geçiş fişleri hazırlandı', state: 'bekliyor' },
 ];
 
@@ -59,6 +61,7 @@ export type Ticket = {
   bundleText: string;
   lockHash: string;
   anchorTxId: string;
+  depositTry: string;
   usdcReceived: string;
   bankReference?: string;
 };
@@ -66,12 +69,14 @@ export type Ticket = {
 type Emit = (id: StepId, state: StepState, detail?: string) => void;
 
 /**
- * `gate` kullanicinin sectigi kapidir. Secim zincire `lock_float`in kendi
+ * `amountTry` kullanicinin yukledigi tutar, `gate` sectigi kapidir. Secim zincire `lock_float`in kendi
  * argumani olarak gider: bakiye o kapiya kilitlenir, entitlement o kapi icin
  * imzalanir ve fisler baska kapida kabul edilmez. Sozlesme yalnizca iki sey
  * dogrular — kapi bu etkinlige kayitli mi, ve yuk dengesi disina cikiyor mu.
  */
-export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promise<Ticket> {
+export async function runTopUp(
+  signer: Signer, gate: string, amountTry: string, emit: Emit,
+): Promise<Ticket> {
   const run = async <T>(id: StepId, fn: () => Promise<T>, detail?: (v: T) => string) => {
     emit(id, 'calisiyor');
     try {
@@ -96,12 +101,12 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
 
   await run('auth', async () => session.ensure(), () => 'şifre yok, cüzdan imzası');
 
-  const quote = await run('quote', () => requestQuote(session, endpoints, CONFIG.depositTry),
+  const quote = await run('quote', () => requestQuote(session, endpoints, amountTry),
     (q) => `1 USDC = ${Number(q.price).toFixed(6)} TRY`);
 
   const deposit = await run('deposit',
     () => depositExchange(session, endpoints, {
-      account: signer.address, quoteId: quote.id, amountTry: CONFIG.depositTry,
+      account: signer.address, quoteId: quote.id, amountTry,
     }),
     (d) => {
       const ref = d.instructions?.external_transfer_memo?.value;
@@ -110,7 +115,7 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
 
   const bankReference = deposit.instructions?.external_transfer_memo?.value;
 
-  await run('bank', () => simulateBankTransfer(session, endpoints, deposit.id, CONFIG.depositTry),
+  await run('bank', () => simulateBankTransfer(session, endpoints, deposit.id, amountTry),
     () => 'mock anchor: simulate-bank-transfer');
 
   const anchorTx = await run('settled',
@@ -124,6 +129,12 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
   const rate = Math.round(Number(quote.price) * 1e7);
   const expires = Math.floor(Date.now() / 1000) + 86_400;
 
+  // Gecis hakki uydurulmaz, kilitlenen bakiyeden cikar. Operator imza ucu
+  // ayni hesabi zincirdeki kilitten bagimsiz olarak tekrar yapar; tutmazsa
+  // imza vermez (bkz. web/api/sign-entitlement.js).
+  const maxUses = Number(amountStroops / fareInStroops(CONFIG.fareTryKurus, rate));
+  if (maxUses < 1) throw new Error('Yüklenen tutar bir geçişe bile yetmiyor.');
+
   const entitlement: Entitlement = {
     userRaw: StrKey.decodeEd25519PublicKey(signer.address),
     devicePk: device.publicKey,
@@ -131,41 +142,34 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
     gate,
     fareTry: CONFIG.fareTryKurus,
     rate,
-    maxUses: CONFIG.maxUses,
+    maxUses,
     expires,
   };
   const entHash = entitlementHash(entitlement);
+
+  // Once kilit, sonra imza. Sira onemli: operator imzayi ancak zincirdeki
+  // kilidi gorup dogruladiktan sonra atiyor.
+  const lock = await run('lock',
+    () => lockFloat(signer, {
+      amount: amountStroops, gate, fareTry: entitlement.fareTry,
+      rate, devicePk: device.publicKey, entHash,
+    }),
+    () => `${maxUses} geçiş · kapı ${gate}`);
 
   // Operator imzasi sunucu tarafinda atilir; gizli anahtar tarayiciya inmez.
   const signed = await run('entitlement', async () => {
     const res = await fetch(`${CONFIG.apiBase}/api/sign-entitlement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userRaw: toHex(entitlement.userRaw),
-        devicePk: toHex(entitlement.devicePk),
-        event: entitlement.event,
-        gate: entitlement.gate,
-        fareTry: entitlement.fareTry,
-        rate: entitlement.rate,
-        maxUses: entitlement.maxUses,
-        expires: entitlement.expires,
-      }),
+      body: JSON.stringify({ user: signer.address, expires }),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? `imza ucu HTTP ${res.status}`);
     if (body.ent_hash !== toHex(entHash)) {
       throw new Error('sunucu farklı bir entitlement özeti hesapladı — format uyuşmuyor');
     }
-    return body as { ent_hash: string; operator_sig: string; operator_pk: string };
-  }, () => 'operatör imzası alındı');
-
-  const lock = await run('lock',
-    () => lockFloat(signer, {
-      amount: amountStroops, gate, fareTry: entitlement.fareTry,
-      rate, devicePk: device.publicKey, entHash,
-    }),
-    () => `kapı ${gate}`);
+    return body as { ent_hash: string; max_uses: number; operator_sig: string; operator_pk: string };
+  }, (b) => `operatör ${b.max_uses} geçiş için imzaladı`);
 
   const bundle = await run('book', async (): Promise<Bundle> => ({
     v: 1,
@@ -176,7 +180,7 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
     device_pk: toHex(device.publicKey),
     fare_try: entitlement.fareTry,
     rate,
-    max_uses: entitlement.maxUses,
+    max_uses: maxUses,
     expires,
     ent_hash: toHex(entHash),
     operator_sig: signed.operator_sig,
@@ -190,6 +194,7 @@ export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promis
     bundleText: encodeBundle(bundle),
     lockHash: lock.hash,
     anchorTxId: deposit.id,
+    depositTry: amountTry,
     usdcReceived: usdcAmount,
     bankReference,
   };

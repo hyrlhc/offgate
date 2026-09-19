@@ -228,6 +228,18 @@ export function lockFloat(
 export const refund = (signer: Signer) =>
   invokeContract(signer, 'refund', [addressArg(signer.address)]);
 
+const USDC_SCALE = 10_000_000n;
+const RATE_SCALE = 10_000_000n;
+const TRY_SCALE = 100n;
+
+/**
+ * Bir gecisin stroop karsiligi. Sozlesmedeki `fare_in_stroops` ile birebir
+ * ayni tam sayi aritmetigi — kayan nokta kullanilmaz, aksi halde tarayici ile
+ * zincir farkli gecis hakki hesaplar.
+ */
+export const fareInStroops = (fareTry: number, rate: number) =>
+  (BigInt(fareTry) * USDC_SCALE * RATE_SCALE) / (TRY_SCALE * BigInt(rate));
+
 /** USDC stroop (10^7) -> "10.2000000" */
 export const stroopsToUsdc = (n: bigint | number) => (Number(n) / 1e7).toFixed(7);
 /** "10.1980454" -> stroop */

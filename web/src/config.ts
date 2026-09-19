@@ -18,7 +18,7 @@ export const CONFIG = {
   usdcCode: env.VITE_USDC_CODE ?? 'USDC',
   usdcIssuer: env.VITE_USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-  contractId: env.VITE_CONTRACT_ID ?? 'CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK',
+  contractId: env.VITE_CONTRACT_ID ?? 'CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG',
 
   // Operator imza ucunun koku. Tarayicida bos (ayni origin); tarayicisiz
   // uctan uca testte gelistirme sunucusunun adresi verilir.
@@ -34,7 +34,11 @@ export const CONFIG = {
   eventId: env.VITE_EVENT_ID ?? 'FEST26',
   depositTry: env.VITE_DEPOSIT_TRY ?? '500',
   fareTryKurus: Number(env.VITE_FARE_TRY_KURUS ?? 10_000),
-  maxUses: Number(env.VITE_MAX_USES ?? 5),
+
+  // Anchor'in SEP-6 yatirma limitleri (tr-mock-anchor). Disina cikan tutar
+  // zaten anchor tarafindan reddedilir; kullaniciya once burada soyluyoruz.
+  minDepositTry: Number(env.VITE_MIN_DEPOSIT_TRY ?? 50),
+  maxDepositTry: Number(env.VITE_MAX_DEPOSIT_TRY ?? 3000),
 } as const;
 
 /**

@@ -23,6 +23,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   const [gates, setGates] = useState<GateInfo[] | null>(null);
   const [gate, setGate] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
+  const [amount, setAmount] = useState(CONFIG.depositTry);
 
   // Kapilari ve yuklerini zincirden okuyoruz; liste sabit kodlanmis degil.
   const loadGates = useCallback(async () => {
@@ -38,6 +39,28 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   useEffect(() => { void loadGates(); }, [loadGates]);
 
   const started = useMemo(() => steps.some((s) => s.state !== 'bekliyor'), [steps]);
+
+  // Tutar kontrolu: anchor limitleri ve "en az bir gecis" kurali.
+  //
+  // Gecis sayisi TL / ucret degildir. TL once USDC'ye cevrilir (anchor'in ALIS
+  // kuru), ucret ise USDC olarak SEP-38 kuruyla hesaplanir; aradaki makas
+  // kadar kayip olur. Burada yaklasik gosteriyoruz — kesin sayi kur
+  // kilitlendiginde belli olur ve bilette yazar. Kasten asagi yuvarliyoruz:
+  // eksik soz vermek, fazla soz verip kapida mahcup olmaktan iyidir.
+  const SPREAD_HAIRCUT = 0.985;
+  const amountTry = Number(amount.replace(',', '.'));
+  const uses = Number.isFinite(amountTry)
+    ? Math.floor((amountTry * SPREAD_HAIRCUT * 100) / CONFIG.fareTryKurus)
+    : 0;
+  const amountError = !Number.isFinite(amountTry) || amountTry <= 0
+    ? 'Geçerli bir tutar gir.'
+    : amountTry < CONFIG.minDepositTry
+      ? `En az ${CONFIG.minDepositTry} TL yüklenebilir.`
+      : amountTry > CONFIG.maxDepositTry
+        ? `En fazla ${CONFIG.maxDepositTry.toLocaleString('tr-TR')} TL yüklenebilir.`
+        : uses < 1
+          ? 'Bu tutar bir geçişe bile yetmiyor.'
+          : null;
 
   const emit = useCallback((id: StepId, state: StepState, detail?: string) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, state, detail: detail ?? s.detail } : s)));
@@ -62,7 +85,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
     setBusy(true);
     setSteps(INITIAL_STEPS);
     try {
-      const t = await runTopUp(signer, gate, emit);
+      const t = await runTopUp(signer, gate, String(amountTry), emit);
       setTicket(t);
       onTicket?.(t);
       void loadGates();
@@ -142,19 +165,45 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
 
       {signer && !ticket && (
         <>
-          <div className="flow-amount">
-            <span className="n">{Number(CONFIG.depositTry).toLocaleString('tr-TR')}</span>
-            <span className="c">TL</span>
+          <label className="amount-field">
+            <span className="amount-label">Ne kadar yükleyeceksin?</span>
+            <span className="amount-input">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                disabled={busy}
+                onChange={(e) => setAmount(e.currentTarget.value)}
+                aria-label="Yüklenecek tutar"
+              />
+              <span className="c">TL</span>
+            </span>
+          </label>
+          <div className="amount-quick">
+            {['250', '500', '1000'].map((v) => (
+              <button
+                key={v}
+                type="button"
+                className="chip"
+                aria-pressed={amount === v}
+                disabled={busy}
+                onClick={() => setAmount(v)}
+              >
+                {Number(v).toLocaleString('tr-TR')}
+              </button>
+            ))}
           </div>
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(CONFIG.fareTryKurus)}</dd>
-            <dt>Geçiş hakkı</dt><dd>{CONFIG.maxUses}</dd>
+            <dt>Geçiş hakkı</dt>
+            <dd>{amountError ? '—' : `≈ ${uses} geçiş`}</dd>
             <dt>Etkinlik</dt><dd>{CONFIG.eventId}</dd>
           </dl>
+          {amountError && <p className="amount-warn">{amountError}</p>}
 
           <GatePicker gates={gates} chosen={gate} busy={busy} onPick={setGate} />
 
-          <button className="primary" onClick={topUp} disabled={busy || !gate}>
+          <button className="primary" onClick={topUp} disabled={busy || !gate || !!amountError}>
             {busy ? 'Yükleniyor…' : gate ? `Yükle — ${gateLabelOf(gates, gate)}` : 'Kapı seç'}
           </button>
           {started && <StepList steps={steps} />}
@@ -174,7 +223,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(ticket.bundle.fare_try)}</dd>
             <dt>Kilitli kur</dt><dd>1 USDC = {formatRate(ticket.bundle.rate)} ₺</dd>
-            <dt>Yatırılan</dt><dd>{Number(CONFIG.depositTry).toLocaleString('tr-TR')} TL</dd>
+            <dt>Yatırılan</dt><dd>{Number(ticket.depositTry).toLocaleString('tr-TR')} TL</dd>
             {ticket.bankReference && (<><dt>Banka referansı</dt><dd className="mono">{ticket.bankReference}</dd></>)}
           </dl>
           <button className="primary" onClick={copy}>

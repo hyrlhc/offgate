@@ -27,8 +27,8 @@ Organizatör TL olarak tahsil eder.
 | P11 Uçtan uca prova | ⏳ sırada |
 | P12–P13 | ⬜ |
 
-**Contract ID:** `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` (testnet)
-**Kayıtlı kapılar:** `M307` (Kapı 1) · `M308` (Kapı 2) — kapıyı kullanıcı seçer
+**Contract ID:** `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` (testnet)
+**Kayıtlı kapılar:** `M307` (Kapı 1) · `M308` (Kapı 2) — kapıyı ve tutarı kullanıcı seçer
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
 ## Dokümanlar
