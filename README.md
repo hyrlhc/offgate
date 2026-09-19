@@ -19,8 +19,10 @@ Organizatör TL olarak tahsil eder.
 | P3 Kontrat v1 (lock_float, assign_gate) | ✅ |
 | P4 Kontrat v2 (settle, refund, denetim) | ✅ |
 | P5 Kontrat testleri | ✅ (26 test) |
-| P6 Web — online akış | ⏳ sırada |
-| P7–P13 | ⬜ |
+| P6 Web — online akış | ✅ |
+| P7 Fiş defteri + bundle | ✅ |
+| P8 ESP32 firmware | ⏳ sırada |
+| P9–P13 | ⬜ |
 
 **Contract ID:** `CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL` (testnet)
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
@@ -35,10 +37,13 @@ Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 ## Hızlı başlangıç
 
 ```sh
-cp .env.example .env     # sonra kendi anahtarlarını doldur
-npm install
-cargo test -p offgate
+cp .env.example .env          # sonra kendi anahtarlarını doldur
+npm install                   # operatör/kurulum scriptleri
+cargo test -p offgate         # sözleşme testleri (26)
 stellar contract build
+
+cd web && npm install         # web uygulaması
+OPERATOR_SECRET=S... npm run dev
 ```
 
 ---
