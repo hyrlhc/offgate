@@ -588,6 +588,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "ent_uses"
+                    },
+                    "val": {
+                      "u32": 4
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "event"
                     },
                     "val": {
@@ -612,6 +620,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "granted"
+                    },
+                    "val": {
+                      "u32": 4
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "locked"
                     },
                     "val": {
@@ -624,6 +640,14 @@
                     },
                     "val": {
                       "i128": "487850780"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "used"
+                    },
+                    "val": {
+                      "u32": 0
                     }
                   }
                 ]

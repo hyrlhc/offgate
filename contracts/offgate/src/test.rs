@@ -420,6 +420,98 @@ fn settle_releases_gate_slot_when_ticket_is_used_up() {
 }
 
 #[test]
+fn top_up_never_grants_more_passes_than_the_money_covers() {
+    let f = setup();
+    f.client.register_gate(&EVT, &G1);
+    let dev = Device::new(53);
+    let ent = f.ent_hash(0xD1);
+    let u = f.lock(&dev, &ent, &G1);
+
+    let first = f.client.account_of(&u);
+    assert_eq!(first.granted, 4, "LOCK dort gecise yetiyor");
+    assert_eq!(first.ent_uses, 4);
+
+    // En kotu ihtimal: dort hakkin tamamini kapida harcadi, hicbiri henuz
+    // zincire dusmedi. Zincir bunu goremez.
+    let ent2 = f.ent_hash(0xD2);
+    let added = LOCK;
+    let predicted = f.client.next_grant(&u, &added);
+    StellarAssetClient::new(&f.e, &f.token).mint(&u, &added);
+    let grant = f.client.top_up(&u, &added, &ent2);
+    assert_eq!(grant, predicted, "next_grant onceden dogru soyluyor");
+
+    let after = f.client.account_of(&u);
+    // Bakiye simdi dokuz gecise yetiyor; dordu zaten imzalanmisti.
+    assert_eq!(after.granted, 9, "toplam imzalanan hak = paranin karsiladigi");
+    assert_eq!(grant, 5, "yeni bilet yalnizca kalan besi verir");
+    assert_eq!(after.ent_uses, 5);
+    assert_eq!(after.ent_hash, ent2, "yururlukteki bilet degisti");
+
+    // Eski bilet kapida sonuna kadar kullanilmis olsa bile, iki biletin
+    // toplam hakki paranin karsiladigini asmiyor.
+    let capacity = (after.balance / (FARE_STROOPS)) as u32;
+    assert_eq!(after.granted, capacity);
+}
+
+#[test]
+fn top_up_counts_settled_receipts_as_no_longer_outstanding() {
+    let f = setup();
+    f.client.register_gate(&EVT, &G1);
+    let dev = Device::new(54);
+    let ent = f.ent_hash(0xD3);
+    let u = f.lock(&dev, &ent, &G1);
+
+    // Iki gecis zincire dustu: artik "acikta" degiller.
+    let rs = [
+        f.receipt(&dev, &u, &ent, 1, 1_700_000_001),
+        f.receipt(&dev, &u, &ent, 2, 1_700_000_002),
+    ];
+    f.client.settle(&G1, &f.batch(&rs));
+    let mid = f.client.account_of(&u);
+    assert_eq!(mid.used, 2);
+    assert_eq!(mid.granted, 4);
+
+    let added = LOCK;
+    StellarAssetClient::new(&f.e, &f.token).mint(&u, &added);
+    let grant = f.client.top_up(&u, &added, &f.ent_hash(0xD4));
+
+    let after = f.client.account_of(&u);
+    // acikta kalan = 4 - 2 = 2; bakiye 7 gecise yetiyor -> 5 yeni hak.
+    assert_eq!(grant, 5);
+    assert_eq!(after.granted, 9);
+    assert_eq!(after.used, 2);
+}
+
+#[test]
+fn top_up_rejects_amount_that_adds_no_pass() {
+    let f = setup();
+    f.client.register_gate(&EVT, &G1);
+    let dev = Device::new(55);
+    let ent = f.ent_hash(0xD5);
+    let u = f.lock(&dev, &ent, &G1);
+
+    // Bir gecisi karsilamayan ek tutar yeni bilet uretmemeli.
+    StellarAssetClient::new(&f.e, &f.token).mint(&u, &1_000i128);
+    assert_eq!(
+        f.client.try_top_up(&u, &1_000i128, &f.ent_hash(0xD6)),
+        Err(Ok(Error::AmountBelowFare)),
+    );
+    // Yururlukteki bilet degismedi.
+    assert_eq!(f.client.account_of(&u).ent_hash, ent);
+}
+
+#[test]
+fn top_up_requires_an_open_ticket() {
+    let f = setup();
+    f.client.register_gate(&EVT, &G1);
+    let u = f.user(LOCK);
+    assert_eq!(
+        f.client.try_top_up(&u, &LOCK, &f.ent_hash(0xD7)),
+        Err(Ok(Error::NoAccount)),
+    );
+}
+
+#[test]
 fn settle_rejects_forged_signature() {
     let f = setup();
     f.client.register_gate(&EVT, &G1);

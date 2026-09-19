@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CONFIG, expertAccount, expertTx, formatRate, formatTry, gateLabel } from './config.ts';
-import { contractErrorMessage, listGates, refund, type GateInfo } from './lib/contract.ts';
+import {
+  accountOf, contractErrorMessage, listGates, refund,
+  type ChainAccount, type GateInfo,
+} from './lib/contract.ts';
 import { INITIAL_STEPS, runTopUp, type Step, type StepId, type StepState, type Ticket } from './lib/flow.ts';
 import { connectWallet, createWristband, type Signer } from './lib/signer.ts';
 
@@ -24,6 +27,17 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   const [gate, setGate] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [amount, setAmount] = useState(CONFIG.depositTry);
+  const [open, setOpen] = useState<ChainAccount | null>(null);
+
+  // Cuzdan baglaninca zincirdeki acik bileti okuyoruz: "zaten bilet var"
+  // durumu bir hata degil, gosterilmesi gereken bir durum.
+  const loadOpen = useCallback(async (address: string) => {
+    try {
+      setOpen(await accountOf(address));
+    } catch {
+      setOpen(null);
+    }
+  }, []);
 
   // Kapilari ve yuklerini zincirden okuyoruz; liste sabit kodlanmis degil.
   const loadGates = useCallback(async () => {
@@ -70,7 +84,9 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
     setError(null);
     setBusy(true);
     try {
-      setSigner(mode === 'wallet' ? await connectWallet() : await createWristband());
+      const s = mode === 'wallet' ? await connectWallet() : await createWristband();
+      setSigner(s);
+      void loadOpen(s.address);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -89,6 +105,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
       setTicket(t);
       onTicket?.(t);
       void loadGates();
+      void loadOpen(signer.address);
     } catch (e) {
       const message = contractErrorMessage(e);
       setError(message);
@@ -108,6 +125,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
     try {
       await refund(signer);
       setLocked(false);
+      setOpen(null);
       setSteps(INITIAL_STEPS);
       void loadGates();
     } catch (e) {
@@ -195,17 +213,35 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
           </div>
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(CONFIG.fareTryKurus)}</dd>
-            <dt>Geçiş hakkı</dt>
+            <dt>{open ? 'Eklenecek hak' : 'Geçiş hakkı'}</dt>
             <dd>{amountError ? '—' : `≈ ${uses} geçiş`}</dd>
             <dt>Etkinlik</dt><dd>{CONFIG.eventId}</dd>
           </dl>
           {amountError && <p className="amount-warn">{amountError}</p>}
 
-          <GatePicker gates={gates} chosen={gate} busy={busy} onPick={setGate} />
+          {open ? (
+            <div className="open-note">
+              <b>Zincirde açık biletin var.</b> Ek yükleme aynı kapıya ve aynı
+              kilitli kura gider: <b>{gateLabelOf(gates, open.gate)}</b>,
+              1 USDC = {formatRate(Number(open.rate))} ₺.
+              {' '}İmzalanan {open.granted} geçişin {open.used} tanesi zincire düştü.
+            </div>
+          ) : (
+            <GatePicker gates={gates} chosen={gate} busy={busy} onPick={setGate} />
+          )}
 
           <button className="primary" onClick={topUp} disabled={busy || !gate || !!amountError}>
-            {busy ? 'Yükleniyor…' : gate ? `Yükle — ${gateLabelOf(gates, gate)}` : 'Kapı seç'}
+            {busy
+              ? 'Yükleniyor…'
+              : open
+                ? `Bakiye ekle — ${gateLabelOf(gates, open.gate)}`
+                : gate ? `Yükle — ${gateLabelOf(gates, gate)}` : 'Kapı seç'}
           </button>
+          {open && (
+            <button className="link-btn danger" onClick={release} disabled={busy}>
+              Bileti kapat, kalan bakiyeyi cüzdana geri al
+            </button>
+          )}
           {started && <StepList steps={steps} />}
         </>
       )}

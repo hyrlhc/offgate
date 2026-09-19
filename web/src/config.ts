@@ -18,7 +18,7 @@ export const CONFIG = {
   usdcCode: env.VITE_USDC_CODE ?? 'USDC',
   usdcIssuer: env.VITE_USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-  contractId: env.VITE_CONTRACT_ID ?? 'CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG',
+  contractId: env.VITE_CONTRACT_ID ?? 'CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX',
 
   // Operator imza ucunun koku. Tarayicida bos (ayni origin); tarayicisiz
   // uctan uca testte gelistirme sunucusunun adresi verilir.

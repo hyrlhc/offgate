@@ -9,8 +9,8 @@ Son güncelleme: 19 Eylül 2026 — Paket 10 sonu
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
+| **Contract ID** | `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX |
 | Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
 | `init` tx | P3 deploy'u ile birlikte yenilendi |
 | soroban-sdk | 27 · hedef `wasm32v1-none` |
@@ -348,8 +348,8 @@ Sözleşme son kez deploy edildi; demo bu adres üzerinden çalışır.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
+| **Contract ID** | `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX |
 | Demo etkinliği | `FEST26` |
 | Kayıtlı kapı | `M307` (fiziksel ESP32) |
 
@@ -377,8 +377,8 @@ testleri kanıtı.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
+| **Contract ID** | `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX |
 | Etkinlik | `FEST26` |
 | Kayıtlı kapılar | `M307` (Kapı 1) · `M308` (Kapı 2) — iki fiziksel ESP32 |
 
@@ -421,8 +421,8 @@ edilmiyor. `assign_gate` yalnızca varsayılan öneri olarak duruyor.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG |
+| **Contract ID** | `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX |
 | Etkinlik | `FEST26` — kapılar `M307` (Kapı 1), `M308` (Kapı 2), ikisi de sıfır yük |
 
 Önceki dağıtımlardaki test kilitleri `refund` gerektiriyordu ve o cüzdanların
@@ -462,3 +462,65 @@ SEP-38 kuruyla USDC olarak hesaplanır. Aradaki makas kadar kayıp olur:
 
 Arayüz %1.5 pay bırakıp aşağı yuvarlıyor ve "≈" ile gösteriyor; kesin sayı kur
 kilitlendikten sonra bilette yazıyor.
+
+---
+
+## Tekrar bilet alma (`top_up`) — yeni dağıtım
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX |
+| Etkinlik | `FEST26` — `M307` (Kapı 1), `M308` (Kapı 2) |
+
+### Sorun
+
+Bileti harcayıp yenisini almak imkânsızdı. `lock_float` açık hesap varsa
+`AlreadyLocked` (#7) döndürüyor, `settle` ise hesabı hiç silmiyor — bakiye
+sıfırlansa bile kayıt duruyordu. Tek çıkış `refund`'dı, o da bütün kilidi
+bozuyor.
+
+### Çözüm — `top_up`
+
+Açık bilete bakiye ekler ve **yeni bir entitlement** yürürlüğe koyar. İade
+gerekmez. Asıl soru yeni biletin kaç geçiş vermesi gerektiği.
+
+Kapılar çevrimdışı olduğu için, eski biletin imzalanmış haklarının kapıda
+harcanıp harcanmadığını zincir **bilemez**. En kötü ihtimali varsayıyoruz:
+
+```
+açıkta_kalan = granted - used          (hepsi harcanmış say)
+yeni_hak     = bakiye / ücret - açıkta_kalan
+```
+
+Böylece imzalanan toplam hak, yatırılan paranın karşıladığı geçiş sayısını
+hiçbir zaman aşmaz — kapılar birbirinden ve zincirden habersiz olsa bile.
+
+`Acct` üç alan kazandı: `granted` (bugüne kadar imzalanan toplam hak),
+`used` (zincire düşen fiş sayısı), `ent_uses` (yürürlükteki biletin hakkı).
+`max_uses` artık istemciden hiç alınmıyor; `lock_float` da kendi hesaplıyor.
+İmza ucu geçiş hakkını `ent_uses`'ten okuyor.
+
+`next_grant(user, amount)` istemciye, `top_up` çağrılsa kaç hak verileceğini
+önceden söylüyor — entitlement özetini kurabilmesi için gerekli (K-9).
+
+### Zincirde doğrulandı
+
+| Adım | Sonuç |
+|---|---|
+| 250 TL yükle, Kapı 2 | 2 geçiş, yeni bilet |
+| Aynı cüzdanla dön | "Zincirde açık biletin var… İmzalanan 2 geçişin 0 tanesi zincire düştü" |
+| 500 TL ekle | **5 geçiş** (kapasite 7 − açıkta 2), yeni `ent_hash` |
+| Toplam imzalanan | 2 + 5 = 7 = paranın karşıladığı |
+| `gate_load(M308)` | 1 (ek yükleme ikinci kez yük saymıyor) |
+
+Testler: `top_up_never_grants_more_passes_than_the_money_covers`,
+`top_up_counts_settled_receipts_as_no_longer_outstanding`,
+`top_up_rejects_amount_that_adds_no_pass`, `top_up_requires_an_open_ticket`.
+**32 test geçiyor.**
+
+### Açık kalan risk — iade
+
+`refund` hâlâ kullanıcı tarafından her an çağrılabiliyor ve kilidi tamamen
+bozuyor. Kullanıcı kapıdan geçip, operatör senkronize etmeden önce iade alırsa
+o geçişler bedava kalır. Kullanıcının kararıyla ayrı ele alınacak.

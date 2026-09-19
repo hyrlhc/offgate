@@ -10,7 +10,8 @@ import {
   depositExchange, discover, makeSession, requestQuote, simulateBankTransfer, waitForCompletion,
 } from './anchor.ts';
 import {
-  contractErrorMessage, ensureTrustline, fareInStroops, lockFloat, usdcToStroops,
+  accountOf, contractErrorMessage, ensureTrustline, fareInStroops, lockFloat,
+  nextGrant, topUp, usdcToStroops,
 } from './contract.ts';
 import {
   buildReceiptBook, entitlementHash, loadOrCreateDeviceKey, toHex, type Entitlement, type SignedReceipt,
@@ -91,7 +92,10 @@ export async function runTopUp(
   };
 
   // Secim en basta kesinlesir: sonraki her adim bu kapiya gore sekillenir.
-  await run('gate', async () => gate, () => `${gate} — kullanıcı seçti`);
+  // Acik bilet varsa kapi zaten zincirde bagli; ek yukleme oraya gider.
+  const existing = await accountOf(signer.address);
+  await run('gate', async () => existing?.gate ?? gate,
+    (g) => (existing ? `${g} — açık bilet bu kapıda` : `${g} — kullanıcı seçti`));
 
   const endpoints = await discover();
   const session = makeSession(endpoints, signer);
@@ -129,32 +133,42 @@ export async function runTopUp(
   const rate = Math.round(Number(quote.price) * 1e7);
   const expires = Math.floor(Date.now() / 1000) + 86_400;
 
-  // Gecis hakki uydurulmaz, kilitlenen bakiyeden cikar. Operator imza ucu
-  // ayni hesabi zincirdeki kilitten bagimsiz olarak tekrar yapar; tutmazsa
-  // imza vermez (bkz. web/api/sign-entitlement.js).
-  const maxUses = Number(amountStroops / fareInStroops(CONFIG.fareTryKurus, rate));
-  if (maxUses < 1) throw new Error('Yüklenen tutar bir geçişe bile yetmiyor.');
+  // Acik bilet varsa kilit bozulmaz, uzerine eklenir. O durumda kapi, ucret
+  // ve kur zincirdeki kayittan gelir — bilet zincirdekiyle birebir tutmali.
+  const fareTry = existing ? Number(existing.fare_try) : CONFIG.fareTryKurus;
+  const lockedRate = existing ? Number(existing.rate) : rate;
+  const targetGate = existing ? existing.gate : gate;
+
+  // Gecis hakki uydurulmaz. Yeni bilette bakiyenin karsiladigi kadar; ek
+  // yuklemede ise kontrat, kapida harcanmis olabilecek eski haklari dusup
+  // soyluyor (`next_grant`). Operator imza ucu ayni sayiyi zincirden okur.
+  const maxUses = existing
+    ? await nextGrant(signer.address, amountStroops)
+    : Number(amountStroops / fareInStroops(fareTry, lockedRate));
+  if (maxUses < 1) throw new Error('Bu tutar bir geçiş daha eklemeye yetmiyor.');
 
   const entitlement: Entitlement = {
     userRaw: StrKey.decodeEd25519PublicKey(signer.address),
     devicePk: device.publicKey,
     event: CONFIG.eventId,
-    gate,
-    fareTry: CONFIG.fareTryKurus,
-    rate,
+    gate: targetGate,
+    fareTry,
+    rate: lockedRate,
     maxUses,
     expires,
   };
   const entHash = entitlementHash(entitlement);
 
-  // Once kilit, sonra imza. Sira onemli: operator imzayi ancak zincirdeki
-  // kilidi gorup dogruladiktan sonra atiyor.
+  // Once zincir, sonra imza. Sira onemli: operator imzayi ancak zincirdeki
+  // kaydi gorup dogruladiktan sonra atiyor (karar K-9).
   const lock = await run('lock',
-    () => lockFloat(signer, {
-      amount: amountStroops, gate, fareTry: entitlement.fareTry,
-      rate, devicePk: device.publicKey, entHash,
-    }),
-    () => `${maxUses} geçiş · kapı ${gate}`);
+    () => (existing
+      ? topUp(signer, { amount: amountStroops, entHash })
+      : lockFloat(signer, {
+          amount: amountStroops, gate: targetGate, fareTry,
+          rate: lockedRate, devicePk: device.publicKey, entHash,
+        })),
+    () => `${maxUses} geçiş · kapı ${targetGate}`);
 
   // Operator imzasi sunucu tarafinda atilir; gizli anahtar tarayiciya inmez.
   const signed = await run('entitlement', async () => {
@@ -174,12 +188,12 @@ export async function runTopUp(
   const bundle = await run('book', async (): Promise<Bundle> => ({
     v: 1,
     event: entitlement.event,
-    gate,
+    gate: targetGate,
     user: signer.address,
     user_raw: toHex(entitlement.userRaw),
     device_pk: toHex(device.publicKey),
-    fare_try: entitlement.fareTry,
-    rate,
+    fare_try: fareTry,
+    rate: lockedRate,
     max_uses: maxUses,
     expires,
     ent_hash: toHex(entHash),

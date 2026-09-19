@@ -96,6 +96,14 @@ pub struct Acct {
     /// Operatorun imzaladigi entitlement belgesinin sha256'si.
     /// Fisler bu hash uzerinden bu bilete baglanir.
     pub ent_hash: BytesN<32>,
+    /// Bu hesap icin bugune kadar imzalanan TOPLAM gecis hakki.
+    /// Her `top_up` bunu artirir; hicbir zaman azalmaz.
+    pub granted: u32,
+    /// Zincire dusmus (settle edilmis) fis sayisi.
+    pub used: u32,
+    /// Yururlukteki entitlement'in kendi gecis hakki. Kapinin gordugu sayi
+    /// budur; her bilet kendi sira numarasi uzayina sahiptir.
+    pub ent_uses: u32,
 }
 
 /// Kapinin topladigi, cihaz anahtariyla imzalanmis gecis fisi.
@@ -160,6 +168,16 @@ pub struct FloatLocked {
     pub amount: i128,
     pub fare_try: i128,
     pub rate: i128,
+}
+
+/// Acik bilete bakiye eklendi, yeni bir entitlement yururluge girdi.
+#[contractevent]
+#[derive(Clone)]
+pub struct ToppedUp {
+    #[topic]
+    pub user: Address,
+    pub amount: i128,
+    pub grant: u32,
 }
 
 /// Offline toplanan fisler zincire yazildi, para operatore gecti.
@@ -330,6 +348,9 @@ impl OffGate {
             &amount,
         );
 
+        // Gecis hakkini kontrat hesaplar; istemciden hicbir sayi alinmaz.
+        let uses = (amount / fare_in_stroops(fare_try, rate)) as u32;
+
         let acct = Acct {
             balance: amount,
             locked: amount,
@@ -339,6 +360,9 @@ impl OffGate {
             rate,
             device_pk,
             ent_hash,
+            granted: uses,
+            used: 0,
+            ent_uses: uses,
         };
         e.storage().persistent().set(&acct_key, &acct);
         bump(&e, &acct_key);
@@ -355,6 +379,81 @@ impl OffGate {
         }
         .publish(&e);
         Ok(gate)
+    }
+
+    /// Acik bir bilete bakiye ekler ve YENI bir entitlement yururluge koyar.
+    ///
+    /// Tekrar bilet almanin yolu budur: iade gerekmez, kullanici kilidini
+    /// bozmaz. Onemli olan yeni biletin kac gecis vermesi gerektigi.
+    ///
+    /// Kapilar cevrimdisi oldugu icin, eski biletin imzalanmis haklarinin
+    /// kapida harcanip harcanmadigini zincir BILEMEZ. Bu yuzden en kotu
+    /// ihtimali varsayiyoruz: imzalanmis ama henuz zincire dusmemis her hak
+    /// harcanmis sayilir.
+    ///
+    ///   acikta_kalan = granted - used          (en kotu ihtimalle harcanmis)
+    ///   yeni_hak     = bakiye / ucret - acikta_kalan
+    ///
+    /// Boylece imzalanan toplam hak hicbir zaman yatirilan paranin
+    /// karsiladigi gecis sayisini asmaz — kapilar birbirinden ve zincirden
+    /// habersiz olsa bile.
+    pub fn top_up(
+        e: Env,
+        user: Address,
+        amount: i128,
+        ent_hash: BytesN<32>,
+    ) -> Result<u32, Error> {
+        user.require_auth();
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        let acct_key = DataKey::Acct(user.clone());
+        let mut acct: Acct = e
+            .storage()
+            .persistent()
+            .get(&acct_key)
+            .ok_or(Error::NoAccount)?;
+
+        let token_addr = cfg_address(&e, DataKey::Token)?;
+        token::Client::new(&e, &token_addr).transfer(
+            &user,
+            &e.current_contract_address(),
+            &amount,
+        );
+
+        acct.balance += amount;
+        acct.locked += amount;
+
+        let grant = Self::grant_for(&acct);
+        if grant < 1 {
+            return Err(Error::AmountBelowFare);
+        }
+
+        acct.granted += grant;
+        acct.ent_uses = grant;
+        acct.ent_hash = ent_hash;
+        e.storage().persistent().set(&acct_key, &acct);
+        bump(&e, &acct_key);
+
+        ToppedUp {
+            user,
+            amount,
+            grant,
+        }
+        .publish(&e);
+        Ok(grant)
+    }
+
+    /// `top_up` cagrilsa kac gecis hakki verilecegini onceden soyler.
+    ///
+    /// Istemci entitlement ozetini kurmak icin bu sayiyi bilmek zorunda;
+    /// zincire yazilan ozetle operatorun imzaladigi belge birebir tutmali
+    /// (karar K-9).
+    pub fn next_grant(e: Env, user: Address, amount: i128) -> Result<u32, Error> {
+        let mut acct = Self::account_of(e, user)?;
+        acct.balance += amount;
+        Ok(Self::grant_for(&acct))
     }
 
     /// Offline toplanan fisleri zincire yazar ve hasilati operatore aktarir.
@@ -405,6 +504,7 @@ impl OffGate {
             bump(&e, &spent_key);
 
             acct.balance -= fare;
+            acct.used += 1;
             e.storage().persistent().set(&acct_key, &acct);
             bump(&e, &acct_key);
 
@@ -644,6 +744,14 @@ impl OffGate {
             return Err(Error::GateTooLoaded);
         }
         Ok(())
+    }
+
+    /// Bakiyenin karsiladigi gecis sayisindan, acikta kalan imzali haklari
+    /// duserek guvenle verilebilecek yeni hakki bulur.
+    fn grant_for(acct: &Acct) -> u32 {
+        let capacity = (acct.balance / fare_in_stroops(acct.fare_try, acct.rate)) as u32;
+        let outstanding = acct.granted.saturating_sub(acct.used);
+        capacity.saturating_sub(outstanding)
     }
 
     fn add_load(e: &Env, gate: &Symbol, delta: i32) {

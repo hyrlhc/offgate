@@ -188,6 +188,35 @@ export async function listGates(from = CONFIG.readAccount): Promise<GateInfo[]> 
   );
 }
 
+/** Zincirdeki acik bilet. Hesap yoksa `null` — hata degil, normal durum. */
+export type ChainAccount = {
+  balance: bigint; locked: bigint; event: string; gate: string;
+  fare_try: bigint; rate: bigint; device_pk: Uint8Array; ent_hash: Uint8Array;
+  granted: number; used: number; ent_uses: number;
+};
+
+export async function accountOf(user: string): Promise<ChainAccount | null> {
+  try {
+    return await readContract<ChainAccount>('account_of', [addressArg(user)], user);
+  } catch (err) {
+    // Sozlesme "hesap yok" (kod 8) donduruyorsa bu bir hata degil.
+    if (/#8\b/.test(String(err))) return null;
+    throw err;
+  }
+}
+
+/** `top_up` cagrilsa kac gecis hakki verilecegini onceden sorar. */
+export const nextGrant = (user: string, amount: bigint) =>
+  readContract<number>('next_grant', [addressArg(user), i128Arg(amount)], user);
+
+export function topUp(signer: Signer, o: { amount: bigint; entHash: Uint8Array }) {
+  return invokeContract(signer, 'top_up', [
+    addressArg(signer.address),
+    i128Arg(o.amount),
+    bytesArg(o.entHash),
+  ]);
+}
+
 export const floatOf = (user: string) =>
   readContract<bigint>('float_of', [addressArg(user)], user);
 

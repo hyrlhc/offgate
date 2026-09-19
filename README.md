@@ -18,7 +18,7 @@ Organizatör TL olarak tahsil eder.
 | P2 Anchor akışı (SEP-1/10/38/6) | ✅ |
 | P3 Kontrat v1 (lock_float, assign_gate) | ✅ |
 | P4 Kontrat v2 (settle, refund, denetim) | ✅ |
-| P5 Kontrat testleri | ✅ (28 test) |
+| P5 Kontrat testleri | ✅ (32 test) |
 | P6 Web — online akış | ✅ |
 | P7 Fiş defteri + bundle | ✅ |
 | P8 ESP32 firmware | ✅ iki kapı: `pio run -e gate1/-e gate2` |
@@ -27,7 +27,7 @@ Organizatör TL olarak tahsil eder.
 | P11 Uçtan uca prova | ⏳ sırada |
 | P12–P13 | ⬜ |
 
-**Contract ID:** `CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG` (testnet)
+**Contract ID:** `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` (testnet)
 **Kayıtlı kapılar:** `M307` (Kapı 1) · `M308` (Kapı 2) — kapıyı ve tutarı kullanıcı seçer
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
@@ -43,7 +43,7 @@ Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 ```sh
 cp .env.example .env          # sonra kendi anahtarlarını doldur
 npm install                   # operatör/kurulum scriptleri
-cargo test -p offgate         # sözleşme testleri (28)
+cargo test -p offgate         # sözleşme testleri (32)
 stellar contract build
 
 cd web && npm install         # web uygulaması

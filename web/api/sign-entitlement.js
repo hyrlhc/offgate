@@ -68,7 +68,7 @@ export function entitlementBytes(e) {
 // --- Zincir dogrulamasi ----------------------------------------------------
 
 const CONTRACT_ID = process.env.VITE_CONTRACT_ID
-  ?? 'CBSHKY6KARP25OXKNYXSVA5LNXAYD2NKMTRELQUXFL4JXTFGHSP3DCDG';
+  ?? 'CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX';
 const RPC_URL = process.env.VITE_RPC_URL ?? 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE = process.env.VITE_NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015';
 const READ_ACCOUNT = process.env.VITE_READ_ACCOUNT
@@ -76,14 +76,6 @@ const READ_ACCOUNT = process.env.VITE_READ_ACCOUNT
 
 /** En fazla 48 saatlik bilet imzalariz. */
 const MAX_TTL_SECONDS = 48 * 3600;
-
-const USDC_SCALE = 10_000_000n;
-const RATE_SCALE = 10_000_000n;
-const TRY_SCALE = 100n;
-
-/** Sozlesmedeki `fare_in_stroops` ile birebir ayni — tam sayi aritmetigi. */
-const fareInStroops = (fareTry, rate) =>
-  (BigInt(fareTry) * USDC_SCALE * RATE_SCALE) / (TRY_SCALE * BigInt(rate));
 
 /** Kullanicinin zincirdeki kilidini okur. Imzasiz, ucretsiz simulasyon. */
 async function readAccountFromChain(user) {
@@ -138,11 +130,11 @@ export default async function handler(req, res) {
     // imza hic verilmez — kapi imzasiz bileti kabul etmez.
     const acct = await readAccountFromChain(body.user);
 
-    const fare = fareInStroops(acct.fare_try, acct.rate);
-    if (fare <= 0n) return res.status(400).json({ error: 'zincirdeki ucret gecersiz' });
-
-    const maxUses = Number(BigInt(acct.balance) / fare);
-    if (maxUses < 1) {
+    // Gecis hakki da zincirden: `ent_uses`, yururlukteki biletin kontrat
+    // tarafindan hesaplanmis hakki. `top_up` bunu, acikta kalan imzali
+    // haklari dusurerek belirliyor (bkz. `grant_for`).
+    const maxUses = Number(acct.ent_uses);
+    if (!Number.isInteger(maxUses) || maxUses < 1) {
       return res.status(400).json({ error: 'kilitli bakiye bir gecise bile yetmiyor' });
     }
 
