@@ -9,7 +9,7 @@ import { CONFIG } from '../config.ts';
 import {
   depositExchange, discover, makeSession, requestQuote, simulateBankTransfer, waitForCompletion,
 } from './anchor.ts';
-import { assignGate, ensureTrustline, lockFloat, usdcToStroops } from './contract.ts';
+import { contractErrorMessage, ensureTrustline, lockFloat, usdcToStroops } from './contract.ts';
 import {
   buildReceiptBook, entitlementHash, loadOrCreateDeviceKey, toHex, type Entitlement, type SignedReceipt,
 } from './receipts.ts';
@@ -24,13 +24,13 @@ export type StepState = 'bekliyor' | 'calisiyor' | 'tamam' | 'hata';
 export type Step = { id: StepId; label: string; detail?: string; state: StepState };
 
 export const INITIAL_STEPS: Step[] = [
+  { id: 'gate', label: 'Kapı seçildi', state: 'bekliyor' },
   { id: 'trustline', label: 'USDC güven hattı', state: 'bekliyor' },
   { id: 'auth', label: 'Cüzdan doğrulandı', detail: 'SEP-10', state: 'bekliyor' },
   { id: 'quote', label: 'Kur kilitlendi', detail: 'SEP-38', state: 'bekliyor' },
   { id: 'deposit', label: 'Ödeme talimatı alındı', detail: 'SEP-6', state: 'bekliyor' },
   { id: 'bank', label: 'Banka transferi alındı', state: 'bekliyor' },
   { id: 'settled', label: 'USDC hesabınıza geçti', state: 'bekliyor' },
-  { id: 'gate', label: 'Kapı atandı', state: 'bekliyor' },
   { id: 'entitlement', label: 'Bilet imzalandı', state: 'bekliyor' },
   { id: 'lock', label: 'Bakiye zincire kilitlendi', state: 'bekliyor' },
   { id: 'book', label: 'Geçiş fişleri hazırlandı', state: 'bekliyor' },
@@ -65,7 +65,13 @@ export type Ticket = {
 
 type Emit = (id: StepId, state: StepState, detail?: string) => void;
 
-export async function runTopUp(signer: Signer, emit: Emit): Promise<Ticket> {
+/**
+ * `gate` kullanicinin sectigi kapidir. Secim zincire `lock_float`in kendi
+ * argumani olarak gider: bakiye o kapiya kilitlenir, entitlement o kapi icin
+ * imzalanir ve fisler baska kapida kabul edilmez. Sozlesme yalnizca iki sey
+ * dogrular — kapi bu etkinlige kayitli mi, ve yuk dengesi disina cikiyor mu.
+ */
+export async function runTopUp(signer: Signer, gate: string, emit: Emit): Promise<Ticket> {
   const run = async <T>(id: StepId, fn: () => Promise<T>, detail?: (v: T) => string) => {
     emit(id, 'calisiyor');
     try {
@@ -73,10 +79,14 @@ export async function runTopUp(signer: Signer, emit: Emit): Promise<Ticket> {
       emit(id, 'tamam', detail?.(value));
       return value;
     } catch (err) {
-      emit(id, 'hata', (err as Error).message);
-      throw err;
+      const message = contractErrorMessage(err);
+      emit(id, 'hata', message);
+      throw new Error(message);
     }
   };
+
+  // Secim en basta kesinlesir: sonraki her adim bu kapiya gore sekillenir.
+  await run('gate', async () => gate, () => `${gate} — kullanıcı seçti`);
 
   const endpoints = await discover();
   const session = makeSession(endpoints, signer);
@@ -106,8 +116,6 @@ export async function runTopUp(signer: Signer, emit: Emit): Promise<Ticket> {
   const anchorTx = await run('settled',
     () => waitForCompletion(session, endpoints, deposit.id),
     (t) => `${t.amount_out ?? '?'} USDC`);
-
-  const gate = await run('gate', () => assignGate(signer.address), (g) => `kapı ${g}`);
 
   // Cihaz anahtari (karar K-1): fisleri cuzdan degil bu anahtar imzalar.
   const device = loadOrCreateDeviceKey();

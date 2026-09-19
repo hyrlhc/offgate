@@ -408,6 +408,15 @@ impl OffGate {
             e.storage().persistent().set(&acct_key, &acct);
             bump(&e, &acct_key);
 
+            // Bilet tukendi: kapinin yuku serbest kalsin. Aksi halde yuk
+            // yalnizca `refund` ile duser ve kapi kalici olarak dolu gorunur —
+            // bu da kullanicinin kapi secimini haksiz yere kisitlardi.
+            // Kosul yalnizca bir kez tutar: sonraki fis yukaridaki
+            // `acct.balance < fare` kontrolune takilip `continue` eder.
+            if acct.balance < fare {
+                Self::add_load(&e, &gate, -1);
+            }
+
             // Etkinlik hasilati denetim ekrani icin biriktiriliyor.
             let rev_key = DataKey::Revenue(acct.event.clone());
             let prev_rev: i128 = e.storage().persistent().get(&rev_key).unwrap_or(0);

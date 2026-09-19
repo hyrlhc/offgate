@@ -18,16 +18,17 @@ Organizatör TL olarak tahsil eder.
 | P2 Anchor akışı (SEP-1/10/38/6) | ✅ |
 | P3 Kontrat v1 (lock_float, assign_gate) | ✅ |
 | P4 Kontrat v2 (settle, refund, denetim) | ✅ |
-| P5 Kontrat testleri | ✅ (26 test) |
+| P5 Kontrat testleri | ✅ (28 test) |
 | P6 Web — online akış | ✅ |
 | P7 Fiş defteri + bundle | ✅ |
-| P8 ESP32 firmware | ✅ (HTTP katmanı P11'de) |
+| P8 ESP32 firmware | ✅ iki kapı: `pio run -e gate1/-e gate2` |
 | P9 Settle köprüsü + withdraw | ✅ |
 | P10 Denetim ekranı | ✅ |
 | P11 Uçtan uca prova | ⏳ sırada |
 | P12–P13 | ⬜ |
 
-**Contract ID:** `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` (testnet)
+**Contract ID:** `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` (testnet)
+**Kayıtlı kapılar:** `M307` (Kapı 1) · `M308` (Kapı 2) — kapıyı kullanıcı seçer
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 
 ## Dokümanlar
@@ -42,11 +43,11 @@ Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 ```sh
 cp .env.example .env          # sonra kendi anahtarlarını doldur
 npm install                   # operatör/kurulum scriptleri
-cargo test -p offgate         # sözleşme testleri (26)
+cargo test -p offgate         # sözleşme testleri (28)
 stellar contract build
 
 cd web && npm install         # web uygulaması
-OPERATOR_SECRET=S... npm run dev
+npm run dev                   # OPERATOR_SECRET'i kök .env'den okur
 ```
 
 ---

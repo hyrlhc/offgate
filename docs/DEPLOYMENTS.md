@@ -9,8 +9,8 @@ Son güncelleme: 19 Eylül 2026 — Paket 10 sonu
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD |
+| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
 | Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
 | `init` tx | P3 deploy'u ile birlikte yenilendi |
 | soroban-sdk | 27 · hedef `wasm32v1-none` |
@@ -348,8 +348,8 @@ Sözleşme son kez deploy edildi; demo bu adres üzerinden çalışır.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CCVFZMFGAX3YZ7JF6P7P7R3N5X5Y6B44G2AHAGAKZSGIRUXN74WGH7MD |
+| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
 | Demo etkinliği | `FEST26` |
 | Kayıtlı kapı | `M307` (fiziksel ESP32) |
 
@@ -370,3 +370,47 @@ Demo etkinliğinde tek kapı kayıtlı olduğu için `assign_gate` her zaman `M3
 döndürür ve prova tekrarlanabilir. Yük dengeleme kodu aynen duruyor;
 `assign_gate_spreads_load_evenly` ve `lock_float_enforces_load_balance_on_chain`
 testleri kanıtı.
+
+---
+
+## Kapı seçimi kullanıcıya verildi — yeni dağıtım
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CBFOUP2QV5YIPF3C3DRI2GJZ27RSFYG37EJMPWRQ4VPJBJEVEANP4SVK |
+| Etkinlik | `FEST26` |
+| Kayıtlı kapılar | `M307` (Kapı 1) · `M308` (Kapı 2) — iki fiziksel ESP32 |
+
+### Neden yeni bir dağıtım gerekti
+
+Önceki dağıtımda `FEST26`'da tek kapı (M307) kayıtlıydı ve yükü 4'tü. İkinci
+kapıyı eklediğimiz anda `GATE_LOAD_TOLERANCE` kuralı M307'yi kilitlerdi:
+yeni kapının yükü 0, M307'ninki 4, aradaki fark toleransın (2) üstünde.
+Kullanıcı M307'yi seçemezdi. İki kapı da sıfırdan başlasın diye yeniden
+dağıttık.
+
+### Sözleşme değişikliği — tükenen bilet kapı yerini bırakır
+
+Kapı yükü yalnızca `refund` ile düşüyordu. Bakiyesi biten bir kullanıcı
+kapıda sonsuza kadar "açık bilet" olarak sayılıyor, kapı haksız yere dolu
+görünüyordu. `settle` artık bakiye bir geçişin altına düştüğünde yükü
+bırakıyor. Koşul tam olarak bir kez tutar; sonraki fiş zaten
+`acct.balance < fare` kontrolüne takılır.
+
+Kanıt: `settle_releases_gate_slot_when_ticket_is_used_up` (28 test geçiyor).
+
+### Kullanıcı seçimi — zincirde doğrulandı
+
+Web arayüzünden **Kapı 2** seçilerek uçtan uca akış çalıştırıldı:
+
+| Kontrol | Sonuç |
+|---|---|
+| Akış adımları | 10/10 yeşil, ilk adım "Kapı seçildi · M308 — kullanıcı seçti" |
+| Anchor | 500 TL → 10.1980454 USDC (referans TRMA-LNXP-4TAU) |
+| `gate_load(M308)` | **1** |
+| `gate_load(M307)` | **0** |
+
+Seçim `lock_float`ın kendi argümanı olarak zincire gidiyor; bakiye o kapıya
+kilitleniyor, entitlement o kapı için imzalanıyor, fişler başka kapıda kabul
+edilmiyor. `assign_gate` yalnızca varsayılan öneri olarak duruyor.

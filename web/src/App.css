@@ -213,6 +213,35 @@ button.link-btn:hover:not(:disabled) { color: var(--muted); }
   background: var(--accent-dim);
 }
 
+.gate-chip .gate-hw {
+  margin-left: 7px; padding-left: 7px; font-size: 11px; opacity: .72;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* --- Kapi secimi --- */
+.gate-pick { display: flex; flex-direction: column; gap: 8px; }
+.gate-pick-lead { margin: 0; font-size: 12.5px; color: var(--muted); }
+.gate-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gate-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 11px 12px; text-align: left; line-height: 1.25;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.gate-opt:hover:not(:disabled) { border-color: var(--muted); }
+.gate-opt[aria-pressed='true'] {
+  border-color: var(--accent); background: var(--accent-dim); color: var(--accent);
+}
+.gate-opt:disabled { opacity: .4; cursor: not-allowed; }
+.gate-opt-name { font-size: 14px; font-weight: 650; }
+.gate-opt-hw { font-size: 10.5px; color: var(--faint); }
+.gate-opt-load { font-size: 10.5px; color: var(--faint); }
+.gate-opt[aria-pressed='true'] .gate-opt-hw,
+.gate-opt[aria-pressed='true'] .gate-opt-load { color: inherit; opacity: .78; }
+
+button.link-btn.danger { color: #ffb4ae; margin-top: 8px; }
+button.link-btn.danger:hover:not(:disabled) { color: #fff; }
+
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: 13px; margin: 0; }
 .kv.tight { gap: 5px 12px; font-size: 12.5px; }
 .kv dt { color: var(--faint); }

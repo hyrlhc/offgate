@@ -140,10 +140,53 @@ export async function ensureTrustline(signer: Signer): Promise<boolean> {
   return true;
 }
 
+// --- Hata cevirisi ---------------------------------------------------------
+
+/**
+ * Sozlesme hatalarinin `Error(Contract, #N)` kodlarini kullanicinin
+ * anlayacagi cumleye cevirir. Numaralar `contracts/offgate/src/lib.rs`
+ * icindeki `enum Error` ile birebir ayni sirada.
+ */
+const CONTRACT_ERRORS: Record<number, string> = {
+  1: 'Sözleşme zaten kurulmuş.',
+  2: 'Sözleşme henüz kurulmamış.',
+  3: 'Bu etkinliğe kayıtlı kapı yok.',
+  4: 'Bu kapı zaten kayıtlı.',
+  5: 'Tutar, ücret veya kur geçersiz.',
+  6: 'Yüklenen tutar bir geçişe bile yetmiyor.',
+  7: 'Bu cüzdanın zincirde açık bir bileti zaten var. '
+    + 'Yeni bilet almak için önce mevcut bakiyeyi çöz.',
+  8: 'Bu cüzdana ait bir bilet bulunamadı.',
+  9: 'Seçilen kapı bu etkinliğe kayıtlı değil.',
+  10: 'Seçilen kapı şu an diğerinden çok daha dolu. Diğer kapıyı seç.',
+};
+
+/** Zincirden gelen ham hatayi okunur hale getirir; taniyamazsa aynen birakir. */
+export function contractErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const code = /Error\(Contract,\s*#(\d+)\)/.exec(raw);
+  if (code) {
+    const known = CONTRACT_ERRORS[Number(code[1])];
+    if (known) return known;
+    return `Sözleşme isteği reddetti (kod ${code[1]}).`;
+  }
+  return raw;
+}
+
 // --- OffGate cagrilari -----------------------------------------------------
 
 export const assignGate = (from: string) =>
   readContract<string>('assign_gate', [symbolArg(CONFIG.eventId)], from);
+
+/** Etkinligin kapilari, zincirdeki anlik yukleriyle. Kapi secimi bunu gosterir. */
+export type GateInfo = { gate: string; load: number };
+
+export async function listGates(from = CONFIG.readAccount): Promise<GateInfo[]> {
+  const gates = await gatesOf(from);
+  return Promise.all(
+    gates.map(async (gate) => ({ gate, load: await gateLoad(gate, from) })),
+  );
+}
 
 export const floatOf = (user: string) =>
   readContract<bigint>('float_of', [addressArg(user)], user);

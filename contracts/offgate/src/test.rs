@@ -392,6 +392,34 @@ fn settle_stops_when_balance_is_exhausted() {
 }
 
 #[test]
+fn settle_releases_gate_slot_when_ticket_is_used_up() {
+    let f = setup();
+    f.client.register_gate(&EVT, &G1);
+    let dev = Device::new(41);
+    let ent = f.ent_hash(0xC4);
+    let u = f.lock(&dev, &ent, &G1);
+    assert_eq!(f.client.gate_load(&G1), 1, "kilit kapiya bir yuk ekler");
+
+    // Dort gecis bakiyeyi bitirir; kapi yuku kendiliginden dusmeli.
+    let mut rs = std::vec::Vec::new();
+    for seq in 1..=3u32 {
+        rs.push(f.receipt(&dev, &u, &ent, seq, 1_700_000_000 + seq as u64));
+    }
+    f.client.settle(&G1, &f.batch(&rs));
+    assert_eq!(f.client.gate_load(&G1), 1, "bakiye surdukce yuk durur");
+
+    let last = f.receipt(&dev, &u, &ent, 4, 1_700_000_004);
+    f.client.settle(&G1, &f.batch(&[last]));
+    assert!(f.client.float_of(&u) < FARE_STROOPS, "bakiye bir gecise yetmiyor");
+    assert_eq!(f.client.gate_load(&G1), 0, "tukenen bilet kapi yerini birakir");
+
+    // Fazladan fis yuku eksiye dusurmemeli.
+    let extra = f.receipt(&dev, &u, &ent, 5, 1_700_000_005);
+    assert_eq!(f.client.settle(&G1, &f.batch(&[extra])), 0);
+    assert_eq!(f.client.gate_load(&G1), 0);
+}
+
+#[test]
 fn settle_rejects_forged_signature() {
     let f = setup();
     f.client.register_gate(&EVT, &G1);
