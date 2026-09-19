@@ -107,7 +107,7 @@ export default function GateChain() {
       const rightX = width * 0.30;
       const gap = rightX - leftX;
       const meetMs = gap / 2 / WAVE_SPEED;
-      const reach = width * 1.25; // telefonun arkasindan gecip soner
+      const reach = width * 0.62; // telefona varmadan soner; sahne dagilmaz
 
       if (now - lastWave > WAVE_PERIOD) {
         waves.push({ born: now });

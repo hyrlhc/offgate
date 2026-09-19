@@ -83,12 +83,12 @@ code {
 .sl { font-size: 12.5px; color: var(--faint); }
 
 /* --- Sahne: kutusuz arka plan + telefon --- */
-.demo-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.demo-page { height: 100dvh; padding-bottom: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 .stage {
   position: relative; flex: 1 1 auto; min-height: 0;
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 40px;
-  padding: 8px 0 4px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 28px;
+  padding: 4px 0 2px;
 }
 
 /* Dalgalar ve zincir: sayfanin kendi zemini uzerinde, hicbir kutu icinde degil.
@@ -109,11 +109,15 @@ code {
 }
 .more:hover { border-bottom-color: var(--accent); }
 
-.stage-phone { position: relative; z-index: 2; display: flex; justify-content: flex-end; }
+.stage-phone {
+  position: relative; z-index: 2; display: flex; justify-content: flex-end;
+  /* sag kenara yapismasin; biraz orta-saga kaysin */
+  margin-right: clamp(12px, 6vw, 110px);
+}
 
 .stage-foot {
-  flex: 0 0 auto; margin: 0; padding: 10px 0 14px;
-  color: var(--faint); font-size: 11.5px; text-align: right;
+  flex: 0 0 auto; margin: 0; padding: 6px 0 10px;
+  color: var(--faint); font-size: 11.5px; text-align: left;
 }
 
 /* --- Anlatim ve denetim sayfalarinin basligi --- */
@@ -128,7 +132,7 @@ code {
 .phone-wrap { display: flex; flex-direction: column; align-items: center; }
 .phone {
   position: relative;
-  height: clamp(460px, calc(100dvh - 190px), 680px);
+  height: clamp(500px, calc(100dvh - 126px), 820px);
   aspect-ratio: 393 / 852;  /* gercek iPhone orani; genislik yukseklikten cikiyor */
   width: auto; border-radius: 48px;
   background: linear-gradient(160deg, #2a2f38 0%, #14171d 42%, #23272f 100%);
@@ -346,10 +350,10 @@ footer { color: var(--faint); font-size: 12px; text-align: center; margin-top: 2
 @media (max-width: 1040px) {
   .stage { grid-template-columns: 1fr; justify-items: center; gap: 18px; }
   .stage-title { padding-bottom: 0; text-align: center; max-width: 520px; }
-  .stage-phone { justify-content: center; }
+  .stage-phone { justify-content: center; margin-right: 0; }
   .demo-page { height: auto; overflow: visible; }
   .chainviz { inset: -20px -16px auto; height: 260px; }
-  .phone { height: clamp(460px, 74vh, 660px); }
+  .phone { height: clamp(460px, 74vh, 700px); }
   .nav-links { gap: 16px; }
 }
 @media (max-width: 480px) {
