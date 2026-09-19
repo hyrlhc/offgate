@@ -5,7 +5,9 @@ import {
   type ChainAccount, type GateInfo,
 } from './lib/contract.ts';
 import { INITIAL_STEPS, runTopUp, type Step, type StepId, type StepState, type Ticket } from './lib/flow.ts';
-import { connectWallet, createWristband, type Signer } from './lib/signer.ts';
+import {
+  connectWallet, createWristband, savedWristbandAddress, type Signer,
+} from './lib/signer.ts';
 
 const MARKS: Record<StepState, string> = { bekliyor: '○', calisiyor: '◐', tamam: '✓', hata: '✕' };
 const short = (s: string, h = 6, t = 4) => (s.length > h + t + 2 ? `${s.slice(0, h)}…${s.slice(-t)}` : s);
@@ -28,6 +30,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   const [locked, setLocked] = useState(false);
   const [amount, setAmount] = useState(CONFIG.depositTry);
   const [open, setOpen] = useState<ChainAccount | null>(null);
+  const saved = useMemo(() => savedWristbandAddress(), []);
 
   // Cuzdan baglaninca zincirdeki acik bileti okuyoruz: "zaten bilet var"
   // durumu bir hata degil, gosterilmesi gereken bir durum.
@@ -80,11 +83,13 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, state, detail: detail ?? s.detail } : s)));
   }, []);
 
-  const connect = async (mode: 'wallet' | 'wristband') => {
+  const connect = async (mode: 'wallet' | 'wristband', forceNew = false) => {
     setError(null);
     setBusy(true);
     try {
-      const s = mode === 'wallet' ? await connectWallet() : await createWristband();
+      const s = mode === 'wallet'
+        ? await connectWallet()
+        : await createWristband(undefined, forceNew);
       setSigner(s);
       void loadOpen(s.address);
     } catch (e) {
@@ -175,9 +180,26 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
           <p className="flow-note">
             Freighter, Lobstr, Albedo ve diğerleri — <b>Stellar Wallets Kit</b>.
           </p>
-          <button className="link-btn" onClick={() => connect('wristband')} disabled={busy}>
-            Cüzdanım yok, etkinlik bilekliği ver
-          </button>
+          {saved ? (
+            <div className="saved-band">
+              <span className="saved-band-lead">
+                Bu tarayıcıda kayıtlı bir bileklik var:
+              </span>
+              <span className="mono saved-band-addr">{short(saved, 8, 6)}</span>
+              <div className="row">
+                <button className="ghost" onClick={() => connect('wristband')} disabled={busy}>
+                  Bu benim, devam et
+                </button>
+                <button className="ghost" onClick={() => connect('wristband', true)} disabled={busy}>
+                  Ben başkasıyım
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="link-btn" onClick={() => connect('wristband')} disabled={busy}>
+              Cüzdanım yok, etkinlik bilekliği ver
+            </button>
+          )}
         </>
       )}
 
@@ -256,6 +278,21 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
               <span className="gate-hw mono">{ticket.bundle.gate}</span>
             </div>
           </div>
+          <div className="owner">
+            <span className="owner-lead">Bu bilet şu cüzdana ait</span>
+            <a
+              className="mono owner-addr"
+              href={expertAccount(ticket.bundle.user)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {short(ticket.bundle.user, 10, 8)} ↗
+            </a>
+            <span className="owner-note">
+              Zincirde de bu adrese kilitli. Kapı bileti bu adres için
+              doğruluyor.
+            </span>
+          </div>
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(ticket.bundle.fare_try)}</dd>
             <dt>Kilitli kur</dt><dd>1 USDC = {formatRate(ticket.bundle.rate)} ₺</dd>
@@ -267,11 +304,12 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
           </button>
           <p className="flow-note">
             Fişler <b>şimdiden imzalandı</b>. Kapıda internet gerekmez.
+            Bu metin <b>hamiline</b> geçerlidir — kopyalayan da kullanabilir,
+            etkinlik bilekliği gibi düşün.
           </p>
           <textarea className="bundle" readOnly value={ticket.bundleText} onFocus={(e) => e.currentTarget.select()} />
           <div className="flow-links">
             <a href={expertTx(ticket.lockHash)} target="_blank" rel="noreferrer">Kilitleme işlemi ↗</a>
-            <a href={expertAccount(ticket.bundle.user)} target="_blank" rel="noreferrer">Hesap ↗</a>
           </div>
           <StepList steps={steps} />
         </>

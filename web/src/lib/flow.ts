@@ -127,7 +127,7 @@ export async function runTopUp(
     (t) => `${t.amount_out ?? '?'} USDC`);
 
   // Cihaz anahtari (karar K-1): fisleri cuzdan degil bu anahtar imzalar.
-  const device = loadOrCreateDeviceKey();
+  const device = loadOrCreateDeviceKey(signer.address);
   const usdcAmount = anchorTx.amount_out ?? '0';
   const amountStroops = usdcToStroops(usdcAmount);
   const rate = Math.round(Number(quote.price) * 1e7);

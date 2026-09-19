@@ -292,6 +292,12 @@ tamamen bağımsız hale gelirdi. Yol haritasında.
 **Banka ayağı mock.** `simulate-bank-transfer` demo anchor'ına özgü. Stellar
 ayağı gerçek testnet; TL ayağı simüle.
 
+**Bundle hamiline geçerli.** Bilet metnini kopyalayan da kullanabilir. İçinde
+gizli anahtar yok ama fişler zaten imzalı olduğu için imzaya da gerek yok.
+Etkinlik bilekliği gibi düşün: kimde ise onundur. Kimin olduğu bilette yazıyor
+(`user_raw`) ve zincirde bakiye o adrese kilitli, ama turnike karşısındakinin
+o kişi olduğunu **doğrulayamaz** — bunun için PIN gerekir (bkz. bölüm 13).
+
 ---
 
 ## 12. Hangi dosya neyi yapıyor
@@ -309,3 +315,35 @@ ayağı gerçek testnet; TL ayağı simüle.
 | `docs/test-vector.md` | Dört platformun aynı baytı ürettiğinin kanıtı |
 | `docs/DEPLOYMENTS.md` | Her dağıtım, her işlem hash'i |
 | `docs/OFFGATE-PACKAGES.md` | Paket planı ve tasarım kararları K-1…K-9 |
+
+
+---
+
+## 13. Bilet kime ait — ve neden turnike bunu doğrulayamıyor
+
+Bilette `user_raw` var, operatör imzalamış, zincirde bakiye o adrese kilitli.
+Yani **biletin sahibi bellidir**. Arayüzde de bilet ekranında hangi cüzdana ait
+olduğu yazıyor ve Stellar Expert'e link veriyor.
+
+Ama turnike, karşısındaki kişinin o cüzdanın sahibi olduğunu **doğrulayamaz**.
+Sebep: doğrulamanın tek yolu kullanıcının o anda bir şey imzalaması olurdu,
+imza da cihaz anahtarını gerektirir — o anahtar `offgate.vercel.app`
+origin'inin localStorage'ında. Turnikenin sayfası `192.168.4.1` origin'inde.
+Tarayıcı bu ikisi arasında veri paylaşımına izin vermez. **Fişleri peşinen
+imzalamamızın sebebi tam olarak bu** (karar K-2).
+
+Dolayısıyla bundle hamiline geçerli bir belge. Bu bilinçli bir kabul, kaza
+değil — ama dokunulmadan bırakılırsa bilet metnini kopyalayan da geçer.
+
+### Çözüm yolu: PIN
+
+Kullanıcı bilet alırken 4–6 haneli bir PIN seçer. Entitlement'a
+`pin_hash = sha256(alan_ayırıcı || user_raw || pin)` eklenir ve **operatör
+imzalar**. Turnike PIN'i sorar, hashler, karşılaştırır. Tamamen çevrimdışı
+doğrulanabilir; bilet metnini kopyalamak yetmez, PIN'i de bilmek gerekir.
+
+Maliyeti: entitlement 138 → 170 bayt. Bu format dört yerde birebir aynı
+üretiliyor (Rust, Node, tarayıcı, ESP32), dolayısıyla dördü de değişir; iki
+ESP32 yeniden yakılır; `docs/test-vector.md` yenilenir.
+
+Henüz yapılmadı — yapılıp yapılmayacağı zaman durumuna bağlı.

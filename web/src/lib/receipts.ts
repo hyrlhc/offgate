@@ -145,19 +145,23 @@ export function verifyReceipt(devicePk: Uint8Array, r: SignedReceipt) {
 // --- Cihaz anahtari (karar K-1) --------------------------------------------
 // Tarayicida uretilir, yalnizca localStorage'da durur, cuzdana hic dokunmaz.
 
-const DEVICE_KEY_STORAGE = 'offgate.device.seed';
+// Cihaz anahtari CUZDAN BASINA tutulur. Tek bir anahtari tum tarayiciyla
+// paylasmak, ayni bilgisayardan giren iki kisiye ayni imzalama anahtarini
+// verirdi; biletleri birbirinden ayirt edilemez hale gelirdi.
+const deviceKeyStorage = (owner: string) => `offgate.device.seed.${owner}`;
 
-export function loadOrCreateDeviceKey() {
-  let hex = localStorage.getItem(DEVICE_KEY_STORAGE);
+export function loadOrCreateDeviceKey(owner: string) {
+  const key = deviceKeyStorage(owner);
+  let hex = localStorage.getItem(key);
   if (!hex) {
     const seed = crypto.getRandomValues(new Uint8Array(32));
     hex = toHex(seed);
-    localStorage.setItem(DEVICE_KEY_STORAGE, hex);
+    localStorage.setItem(key, hex);
   }
   const seed = fromHex(hex);
   return { seed, publicKey: getPublicKey(seed) };
 }
 
-export function resetDeviceKey() {
-  localStorage.removeItem(DEVICE_KEY_STORAGE);
+export function resetDeviceKey(owner: string) {
+  localStorage.removeItem(deviceKeyStorage(owner));
 }

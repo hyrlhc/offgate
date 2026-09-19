@@ -69,9 +69,19 @@ export async function connectWallet(): Promise<Signer> {
 
 const WRISTBAND_STORAGE = 'offgate.wristband.secret';
 
-/** Var olan bilekligi yukler; yoksa uretip Friendbot ile fonlar. */
-export async function createWristband(onStep?: (msg: string) => void): Promise<Signer> {
-  let secret = localStorage.getItem(WRISTBAND_STORAGE);
+/**
+ * Oturum bilekligi.
+ *
+ * `fresh` verilmezse tarayicida kayitli bileklik varsa o kullanilir. Bu,
+ * ayni bilgisayardan giren ikinci kisiye BIRINCININ hesabini verir — demoda
+ * tam olarak bu oldu. Bu yuzden arayuz kayitli bileklik varken artik sessizce
+ * devam etmiyor, kime ait oldugunu gosterip soruyor (bkz. TopUpFlow).
+ */
+export async function createWristband(
+  onStep?: (msg: string) => void,
+  forceNew = false,
+): Promise<Signer> {
+  let secret = forceNew ? null : localStorage.getItem(WRISTBAND_STORAGE);
   let fresh = false;
   if (!secret) {
     secret = Keypair.random().secret();
@@ -106,6 +116,17 @@ export function forgetWristband() {
 }
 
 export const hasWristband = () => localStorage.getItem(WRISTBAND_STORAGE) !== null;
+
+/** Kayitli bilekligin adresi — uretmeden, fonlamadan, sadece bakmak icin. */
+export function savedWristbandAddress(): string | null {
+  const secret = localStorage.getItem(WRISTBAND_STORAGE);
+  if (!secret) return null;
+  try {
+    return Keypair.fromSecret(secret).publicKey();
+  } catch {
+    return null;
+  }
+}
 
 /** Tarayiciya enjekte edilmis bir cuzdan var mi (masaustu eklentisi). */
 export function looksLikeDesktopWallet() {
