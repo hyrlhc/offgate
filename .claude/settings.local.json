@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s --max-time 10 https://tr-mock-anchor.fly.dev/health)",
+      "Bash(curl -s --max-time 10 https://tr-mock-anchor.fly.dev/.well-known/stellar.toml)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git config *)",
+      "Bash(set -x)",
+      "Bash(rustup toolchain *)",
+      "Bash(rustup target *)",
+      "Bash(cargo --version)"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+target/
+dist/
+.pio/
+.vscode/
+.DS_Store
+
+# GIZLI — asla commit edilmez
+.env
+.env.local
+*.secret
+keys/
