@@ -13,6 +13,18 @@ const MARKS: Record<StepState, string> = { bekliyor: '○', calisiyor: '◐', ta
 const short = (s: string, h = 6, t = 4) => (s.length > h + t + 2 ? `${s.slice(0, h)}…${s.slice(-t)}` : s);
 
 /**
+ * Biletin okunabilir kimligi: `ent_hash`'in ilk 10 hane hex'i, dorderli
+ * gruplanmis. Her bilet icin farklidir — kullanici, cuzdan, kapi, tutar ve
+ * sure bu ozetin icinde.
+ *
+ * Bunu gostermemizin sebebi: paketin kendisi base64 ve ilk 63 karakteri her
+ * kullanicida AYNI (`{"v":1,"event":"FEST26","gate":"M307","user":"` kismi).
+ * Ekranda bakan "herkese ayni sifre veriliyor" saniyordu.
+ */
+const ticketCode = (entHash: string) =>
+  entHash.slice(0, 10).toUpperCase().replace(/(.{4})(.{4})(.{2})/, '$1-$2-$3');
+
+/**
  * Kullanicinin telefonda gorecegi akis. Uc ekran: cuzdan, yukleme, bilet.
  *
  * Demo masaustunden surulur (cuzdan eklentisi orada calisir), ama arayuz
@@ -279,7 +291,13 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
             </div>
           </div>
           <div className="owner">
-            <span className="owner-lead">Bu bilet şu cüzdana ait</span>
+            <span className="owner-lead">Bilet kodu</span>
+            <span className="mono ticket-code">{ticketCode(ticket.bundle.ent_hash)}</span>
+            <span className="owner-note">
+              Her bilete özel. Cüzdan, kapı, tutar ve süre bu özetin içinde.
+            </span>
+            <span className="owner-sep" />
+            <span className="owner-lead">Sahibi</span>
             <a
               className="mono owner-addr"
               href={expertAccount(ticket.bundle.user)}
@@ -288,9 +306,13 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
             >
               {short(ticket.bundle.user, 10, 8)} ↗
             </a>
+            <span className="owner-lead">İmza anahtarın</span>
+            <span className="mono owner-addr dim">
+              {short(ticket.bundle.device_pk, 8, 6)}
+            </span>
             <span className="owner-note">
-              Zincirde de bu adrese kilitli. Kapı bileti bu adres için
-              doğruluyor.
+              Kapı her geçişte fişin imzasını <b>bu anahtarla</b> doğruluyor —
+              başkasının anahtarıyla imzalanmış fiş kabul edilmiyor.
             </span>
           </div>
           <dl className="kv tight">
@@ -307,7 +329,15 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
             Bu metin <b>hamiline</b> geçerlidir — kopyalayan da kullanabilir,
             etkinlik bilekliği gibi düşün.
           </p>
-          <textarea className="bundle" readOnly value={ticket.bundleText} onFocus={(e) => e.currentTarget.select()} />
+          <details className="bundle-box">
+            <summary>Ham paket ({ticket.bundleText.length} karakter)</summary>
+            <textarea
+              className="bundle"
+              readOnly
+              value={ticket.bundleText}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          </details>
           <div className="flow-links">
             <a href={expertTx(ticket.lockHash)} target="_blank" rel="noreferrer">Kilitleme işlemi ↗</a>
           </div>

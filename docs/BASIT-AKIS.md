@@ -347,3 +347,24 @@ Maliyeti: entitlement 138 → 170 bayt. Bu format dört yerde birebir aynı
 ESP32 yeniden yakılır; `docs/test-vector.md` yenilenir.
 
 Henüz yapılmadı — yapılıp yapılmayacağı zaman durumuna bağlı.
+
+### "Herkese aynı kod veriliyor" yanılgısı
+
+Paket base64 kodlu bir JSON ve JSON şöyle başlıyor:
+
+```
+{"v":1,"event":"FEST26","gate":"M307","user":"G...
+```
+
+`user` alanına kadar olan kısım aynı kapıdaki herkeste aynı. base64'te bu
+**ilk 63 karakterin birebir aynı olması** demek. Küçük bir kutuda bakınca
+"herkese aynı şifre veriliyor" gibi görünüyor — ama 64. karakterden sonra
+her şey farklı.
+
+Doğruladık: üretimde iki ayrı kimlikle bilet alındı, `user`, `device_pk` ve
+`ent_hash` üçü de farklı çıktı.
+
+Yine de bu bir arayüz hatasıydı. Artık bilet ekranında **bilet kodu** var:
+`ent_hash`'in ilk 10 hanesi, `B30C-9BCE-15` biçiminde. Her bilete özel.
+Yanında sahibi olan cüzdan ve fişleri imzalayan cihaz anahtarı da yazıyor.
+Ham paket katlanmış bir kutuya alındı.
