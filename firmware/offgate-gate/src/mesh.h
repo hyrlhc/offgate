@@ -52,6 +52,14 @@ struct GossipPacket {
   uint8_t pk[32];
 };  // 177 bayt — ESP-NOW siniri 250
 
+// Bicim hatasi derleme zamaninda yakalansin: alanlardan biri degisirse
+// karsi taraf sessizce yanlis okur, bu da en kotu turden hatadir.
+static_assert(GOSSIP_MSG_LEN == GOSSIP_DOMAIN_LEN + ID_LEN + 32 + 4 + 4 + 8,
+              "gossip mesaji alan toplamiyla uyusmuyor");
+static_assert(sizeof(GossipPacket) == GOSSIP_MSG_LEN + 64 + 32,
+              "GossipPacket'te dolgu var — bicim bozulur");
+static_assert(sizeof(GossipPacket) <= 250, "ESP-NOW tek cerceve siniri asildi");
+
 struct MeshPeer {
   bool used;
   char gate[ID_LEN + 1];
