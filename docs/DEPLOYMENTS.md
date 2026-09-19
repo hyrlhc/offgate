@@ -3,22 +3,21 @@
 > Hepsi **Stellar Testnet**. Gerçek para yok.
 > Network passphrase: `Test SDF Network ; September 2015`
 
-Son güncelleme: 19 Eylül 2026 — Paket 2 sonu
+Son güncelleme: 19 Eylül 2026 — Paket 3 sonu
 
 ## Kontrat
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | `CAQORKDWXS4MQNMOYQ6AMRVZWMBAGSQYXQQF5P3TV7AUBSND6NRACXYT` |
-| Gezgin | https://stellar.expert/explorer/testnet/contract/CAQORKDWXS4MQNMOYQ6AMRVZWMBAGSQYXQQF5P3TV7AUBSND6NRACXYT |
-| Deploy tx | `8dbd6da07e46dead6fc627288d43337c28aa03949cea6e91b90be07e5d808dfb` |
-| `init` tx | `dc9ab79d78a23886f8b23a734d329af487807eff0a50abe6b7ee933107c9a5f9` |
+| **Contract ID** | `CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR |
+| Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
+| `init` tx | P3 deploy'u ile birlikte yenilendi |
 | soroban-sdk | 27 · hedef `wasm32v1-none` |
 
-> **Not:** P1'de deploy edilen sürüm kurulum iskeletidir (`init`, okuma fonksiyonları).
-> `lock_float`/`settle` P3-P4'te eklenecek ve kontrat yeniden deploy edilecek — o zaman
-> bu tablodaki Contract ID güncellenecek. P1'in amacı deploy hattının çalıştığını
-> **bugün** kanıtlamaktı.
+> **Not:** `settle` ve `refund` P4'te eklenecek; kontrat o zaman bir kez daha deploy
+> edilecek ve bu tablodaki Contract ID güncellenecek. P1'de deploy edilen ilk sürüm
+> `CAQORKDW…CXYT` idi (kurulum iskeleti) — deploy hattının çalıştığını kanıtlamak içindi.
 
 ## Hesaplar
 
@@ -61,7 +60,7 @@ d02af0908648d4ad33e1bcff8f6660c5b14d9529f753eefdb4aeb8effade1264
 
 ```sh
 # Kontrat kurulumu okunuyor mu
-stellar contract invoke --id CAQORKDWXS4MQNMOYQ6AMRVZWMBAGSQYXQQF5P3TV7AUBSND6NRACXYT \
+stellar contract invoke --id CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR \
   --source admin --network testnet -- admin
 
 # Trustline zincirde mi
@@ -99,3 +98,67 @@ curl -s https://horizon-testnet.stellar.org/accounts/GCE2P4ZJAC2FWNJIDMA7DXKM5UU
   kullanılırsa anchor 400 döner.
 - **`simulate-bank-transfer` yalnızca mock anchor'da vardır.** Gerçekte kullanıcı
   EFT açıklamasına referans kodunu yazar, anchor ödemeyi Stellar hesabıyla eşleştirir.
+
+## Paket 3 — kilitleme ve kapı ataması
+
+Kontrat `lock_float` + `assign_gate` ile yeniden deploy edildi.
+
+| Alan | Değer |
+|---|---|
+| Contract ID | `CCEGEHR4Q7PTYUWC3BQE2XUNX4X563UBWG3JUE64HPOSL5EGXG5PT5FR` |
+| Deploy tx | `c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51` |
+| Kayıtlı kapılar | `M307`, `M308`, `M309` (etkinlik `EVT1`) |
+| `lock_float` tx | `360e2752e000a634d6d11b23928c642bf5b00fb85bd0073edcbc77d87628c5e1` |
+
+### Gerçek çağrının sonucu
+
+```
+lock_float(user, 102000000, EVT1, fare_try=10000, rate=487850780, device_pk=98d1ab95…)
+  -> "M307"
+
+float_of(user)      = 102000000   (10.2 USDC)
+uses_left(user)     = 4           (100 TL / 48.785078 = 2.0498 USDC per geçiş)
+gate_load(M307)     = 1
+gate_load(M308)     = 0
+assign_gate(EVT1)   = "M308"      (yük dengeli: sıradaki en boş kapı)
+
+kullanıcı USDC      : 20.3960908 -> 10.1960908
+kontrat USDC        : 0          -> 10.2000000
+```
+
+Yayınlanan olaylar (`stellar contract invoke` çıktısından):
+- SAC `transfer`: kullanıcı → kontrat, 102000000
+- OffGate `FloatLocked`: user, event, gate, amount, fare_try, rate
+
+### Uygulama notları
+
+- **`require_auth`** `lock_float`'ın ilk satırında. Para yalnızca sahibinin imzasıyla hareket eder.
+- **Kapı ataması para hareketinden önce** yapılıyor: atama başarısız olursa hiç USDC hareket etmez
+  (test: `lock_without_gates_fails_and_moves_no_money`).
+- **Cihaz anahtarı zincire yazılıyor** (karar K-1). Fişleri bu anahtar imzalayacak, cüzdanın
+  ana anahtarı telefonun offline tarafına hiç inmiyor.
+- **Ücret matematiği:** `stroop = fare_try × 10⁷ × 10⁷ / (100 × rate)`.
+  `fare_try` kuruş, `rate` TRY/USDC × 10⁷. Kilitli kur `Acct`'te saklandığı için
+  piyasa oynasa da kullanıcının geçiş başına ödediği TL değişmez.
+- **TTL:** her `persistent` yazımdan sonra `extend_ttl` çağrılıyor (eşik 100.000, uzatma 500.000).
+- **Olaylar** `#[contractevent]` makrosu ile tanımlı (SDK 27'nin güncel yolu), eski
+  `events().publish()` değil.
+
+### Testler
+
+`cargo test -p offgate` → **12/12 geçiyor**
+
+| Test | Ne kanıtlıyor |
+|---|---|
+| `init_stores_config_and_rejects_second_call` | Kurulum tek seferlik |
+| `register_gate_adds_once_and_rejects_duplicate` | Kapı iki kez kaydedilemez |
+| `lock_without_gates_fails_and_moves_no_money` | Başarısız atamada para hareket etmez |
+| `lock_float_moves_usdc_and_assigns_gate` | Ana akış + olay yayını |
+| `lock_float_rejects_amount_below_one_fare` | Bir geçişe yetmeyen tutar reddedilir |
+| `lock_float_rejects_second_lock_for_same_user` | Çifte kilit engelli |
+| `lock_float_rejects_nonpositive_values` | Sıfır/negatif tutar, ücret, kur reddedilir |
+| `lock_float_requires_user_auth` | İmzasız çağrı panikler |
+| `gate_assignment_spreads_load_evenly` | 3 kapı / 6 kullanıcı → 2-2-2 |
+| `assign_gate_picks_least_loaded` | En az yüklü kapı seçiliyor |
+| `assign_gate_fails_for_unknown_event` | Bilinmeyen etkinlik reddedilir |
+| `fare_conversion_matches_locked_rate` | Kur matematiği ve TL sabitliği |
