@@ -11,7 +11,7 @@ import {
 } from './anchor.ts';
 import {
   accountOf, contractErrorMessage, ensureTrustline, fareInStroops, lockFloat,
-  nextGrant, topUp, usdcToStroops,
+  nextGrant, rateForExactPasses, topUp, usdcToStroops,
 } from './contract.ts';
 import {
   buildReceiptBook, entitlementHash, loadOrCreateDeviceKey, toHex, type Entitlement, type SignedReceipt,
@@ -76,8 +76,10 @@ type Emit = (id: StepId, state: StepState, detail?: string) => void;
  * dogrular — kapi bu etkinlige kayitli mi, ve yuk dengesi disina cikiyor mu.
  */
 export async function runTopUp(
-  signer: Signer, gate: string, amountTry: string, emit: Emit,
+  signer: Signer, gate: string, passes: number, emit: Emit,
 ): Promise<Ticket> {
+  // Fiyat ilkokul matematigi: bir gecis bir banknot, banknot 100 TL.
+  const amountTry = String((passes * CONFIG.fareTryKurus) / 100);
   const run = async <T>(id: StepId, fn: () => Promise<T>, detail?: (v: T) => string) => {
     emit(id, 'calisiyor');
     try {
@@ -106,7 +108,7 @@ export async function runTopUp(
   await run('auth', async () => session.ensure(), () => 'şifre yok, cüzdan imzası');
 
   const quote = await run('quote', () => requestQuote(session, endpoints, amountTry),
-    (q) => `1 USDC = ${Number(q.price).toFixed(6)} TRY`);
+    (q) => `1 USDC = ${Number(q.total_price).toFixed(6)} TRY`);
 
   const deposit = await run('deposit',
     () => depositExchange(session, endpoints, {
@@ -130,14 +132,18 @@ export async function runTopUp(
   const device = loadOrCreateDeviceKey(signer.address);
   const usdcAmount = anchorTx.amount_out ?? '0';
   const amountStroops = usdcToStroops(usdcAmount);
-  const rate = Math.round(Number(quote.price) * 1e7);
   const expires = Math.floor(Date.now() / 1000) + 86_400;
 
   // Acik bilet varsa kilit bozulmaz, uzerine eklenir. O durumda kapi, ucret
   // ve kur zincirdeki kayittan gelir — bilet zincirdekiyle birebir tutmali.
   const fareTry = existing ? Number(existing.fare_try) : CONFIG.fareTryKurus;
-  const lockedRate = existing ? Number(existing.rate) : rate;
   const targetGate = existing ? existing.gate : gate;
+  // Yeni bilette kur, GERCEKLESEN yatirmadan geri hesaplanir; boylece
+  // N banknot her zaman tam N gecis eder. Ek yuklemede kur zincirde kilitli
+  // kalir — kullanicinin gecis basina odedigi TL degismesin diye.
+  const lockedRate = existing
+    ? Number(existing.rate)
+    : rateForExactPasses(amountStroops, fareTry, passes);
 
   // Gecis hakki uydurulmaz. Yeni bilette bakiyenin karsiladigi kadar; ek
   // yuklemede ise kontrat, kapida harcanmis olabilecek eski haklari dusup

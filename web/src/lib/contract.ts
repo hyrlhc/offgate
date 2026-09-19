@@ -256,6 +256,27 @@ const TRY_SCALE = 100n;
 export const fareInStroops = (fareTry: number, rate: number) =>
   (BigInt(fareTry) * USDC_SCALE * RATE_SCALE) / (TRY_SCALE * BigInt(rate));
 
+/**
+ * `passes` adet gecisi TAM OLARAK karsilayan kuru bulur.
+ *
+ * Neden gerekli: kullanici 4 banknot alip 400 TL odedigi halde 3 gecis
+ * gormemeli. Anchor'in verdigi `total_price` 7 haneye yuvarlanmis bir sayi;
+ * ondan cikan ucretle carpilinca elde kalan pay bazen tek bir stroop'a kadar
+ * iniyor ve kur birazcik oynasa gecis sayisi bire dusuyor.
+ *
+ * Bunun yerine kuru, GERCEKLESEN yatirmadan geri hesapliyoruz: gecis basina
+ * dusen tam tutar `amount / passes`. Bu, kullanicinin fiilen odedigi kurdur —
+ * uydurma degil, `total_price`in yuvarlanmamis hali.
+ */
+export function rateForExactPasses(amount: bigint, fareTry: number, passes: number): number {
+  const target = amount / BigInt(passes);          // gecis basina stroop (asagi yuvarlar)
+  if (target <= 0n) throw new Error('Tutar bir geçişe bile yetmiyor.');
+  const num = BigInt(fareTry) * USDC_SCALE * RATE_SCALE;
+  // Yukari yuvarla: kur buyudukce ucret kuculur, boylece pay hep pozitif kalir.
+  const rate = (num + TRY_SCALE * target - 1n) / (TRY_SCALE * target);
+  return Number(rate);
+}
+
 /** USDC stroop (10^7) -> "10.2000000" */
 export const stroopsToUsdc = (n: bigint | number) => (Number(n) / 1e7).toFixed(7);
 /** "10.1980454" -> stroop */

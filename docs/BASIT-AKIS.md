@@ -45,7 +45,7 @@ bir anahtar üretiyoruz ve **fişleri daha internet varken önceden imzalıyoruz
 | # | Adım | Ne oluyor |
 |---|---|---|
 | 1 | Kapı seç | Kullanıcı Kapı 1 (M307) veya Kapı 2 (M308) seçer |
-| 2 | Tutar gir | 50–3000 TL arası, kaç geçiş edeceğini ekranda görür |
+| 2 | Kaç geçiş | Banknot gibi: 1 geçiş = 100 TL. 4 geçiş istersen 400 TL |
 | 3 | Güven hattı | Cüzdanda USDC trustline yoksa açılır |
 | 4 | SEP-10 | Cüzdan imzasıyla anchor'a giriş — şifre yok |
 | 5 | SEP-38 | Kur kilitlenir (1 USDC = 48.78 ₺ gibi) |
@@ -194,9 +194,40 @@ max_uses = kilitlenen_bakiye / bir_geçişin_fiyatı
 
 İstemciden hiçbir sayı alınmıyor.
 
-> **Dikkat:** geçiş sayısı "TL ÷ ücret" değildir. TL, anchor'ın **alış**
-> kuruyla USDC'ye çevrilir; ücret ise SEP-38 kuruyla hesaplanır. Aradaki makas
-> kadar kayıp olur. 500 TL, 100 TL'lik ücretle **5 değil 4** geçiş eder.
+### Fiyat: banknot mantığı
+
+Kullanıcı TL tutarı girmez, **kaç geçiş** istediğini seçer. Bir geçiş bir
+banknot, banknot 100 TL. 4 geçiş istiyorsan 400 TL. İlkokul matematiği.
+
+Bunu doğru kurmak göründüğünden ince. Geçiş sayısı "TL ÷ ücret" değil: TL
+önce USDC'ye çevrilir, ücret de USDC olarak hesaplanır. İki farklı kur
+kullanılırsa aradaki makas kadar kayıp olur.
+
+İlk sürümde tam bu hata vardı. Ücreti SEP-38'in `price` alanıyla
+hesaplıyorduk — o alan spread'i **hariç** tutuyor. Kullanıcının fiilen ödediği
+kur ise `total_price`. İkisi ayrı olunca 500 TL, 100 TL'lik ücretle 4 geçiş
+ediyordu.
+
+İki düzeltme:
+
+1. Ücretin kuru artık `total_price` — TL'nin USDC'ye çevrildiği kurun aynısı.
+2. Kur, **gerçekleşen yatırmadan geri hesaplanıyor**:
+   `ücret = yatırılan_stroop / geçiş_sayısı`, kur da bu ücreti veren en küçük
+   kur. Bu, kullanıcının fiilen ödediği kurun yuvarlanmamış hali.
+
+İkincisi neden gerekli: `total_price` 7 haneye yuvarlanmış bir sayı. Ondan
+çıkan ücretle çarpınca elde kalan pay bazen **tek bir stroop**'a iniyordu; kur
+kıpırdasa geçiş sayısı bire düşerdi. Geri hesaplama payı garantiye alıyor.
+
+Doğrulama (gerçek anchor fiyatlarıyla):
+
+| Ödenen | Beklenen | Çıkan | Artan |
+|---|---|---|---|
+| 100 TL | 1 | 1 | 1 stroop |
+| 200 TL | 2 | 2 | 3 |
+| 400 TL | 4 | 4 | 7 |
+| 500 TL | 5 | 5 | 9 |
+| 3000 TL | 30 | 30 | 55 |
 
 ---
 
@@ -222,13 +253,16 @@ yeni_hak     = bakiye / ücret - açıkta_kalan
 
 | Adım | Bakiye | granted | used | Yeni bilet |
 |---|---|---|---|---|
-| 250 TL kilitle | 2 geçişlik | 2 | 0 | 2 geçiş |
+| 2 geçiş al (200 TL) | 2 geçişlik | 2 | 0 | 2 geçiş |
 | (turnikeden 2 kez geç, senkron yok) | aynı | 2 | 0 | — |
-| +500 TL ekle | 7 geçişlik | 7 | 0 | **5 geçiş** |
+| 5 geçiş daha al (500 TL) | 7 geçişlik | 7 | 0 | **5 geçiş** |
 
 Açıkta 2 hak vardı, kapasite 7'ye çıktı, yeni bilet 5 veriyor. Toplam imzalanan
 2 + 5 = 7 = paranın karşıladığı. Turnikeden 2'sini geçmiş olsan da olmasan da
 7'yi aşamıyorsun.
+
+Ek yüklemede kur **zincirde kilitli kalır** — kullanıcının geçiş başına
+ödediği TL, piyasa oynasa da değişmesin diye.
 
 Her `top_up` yeni bir `ent_hash` üretir, yani turnikede **yeni bir sıra
 numarası uzayı** başlar. Eski fişler eski `ent_hash`'e bağlı kaldığı için

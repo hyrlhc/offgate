@@ -524,3 +524,61 @@ Testler: `top_up_never_grants_more_passes_than_the_money_covers`,
 `refund` hâlâ kullanıcı tarafından her an çağrılabiliyor ve kilidi tamamen
 bozuyor. Kullanıcı kapıdan geçip, operatör senkronize etmeden önce iade alırsa
 o geçişler bedava kalır. Kullanıcının kararıyla ayrı ele alınacak.
+
+---
+
+## Fiyatlandırma düzeltmesi — banknot mantığı
+
+### Sorun
+
+Arayüz 500 TL karşılığında 4 geçiş veriyordu. Geçiş ücreti 100 TL olduğu halde.
+
+### Kök neden
+
+Geçiş ücretinin kuru SEP-38 quote'unun `price` alanından alınıyordu. O alan
+spread'i **hariç** tutuyor; kullanıcının fiilen ödediği kur `total_price`.
+
+```
+GET /sep38/price?sell_amount=400&...
+  "price":       "48.785078"     <- kullandığımız (yanlış)
+  "total_price": "49.0290033"    <- fiilen ödenen
+  "buy_amount":  "8.1584363"
+```
+
+TL, `total_price` ile USDC'ye çevriliyor ama ücret `price` ile
+hesaplanıyordu. Aradaki %0.5 makas her geçişte birikip bir geçişi yutuyordu.
+
+### Düzeltme
+
+**1. Doğru kur.** Ücretin kuru artık `total_price`.
+
+**2. Kur gerçekleşen yatırmadan geri hesaplanıyor.**
+
+```js
+ücret_hedef = yatırılan_stroop / geçiş_sayısı        // aşağı yuvarla
+kur         = ceil(fare_try · 10⁷ · 10⁷ / (100 · ücret_hedef))
+```
+
+Sadece (1) yeterli değildi: `total_price` 7 haneye yuvarlanmış bir sayı ve
+ondan çıkan ücretle çarpınca elde kalan pay 100 TL'de **tek bir stroop**'a
+iniyordu. Kur kıpırdasa geçiş sayısı bire düşerdi. Geri hesaplama, kullanıcının
+fiilen ödediği kurun yuvarlanmamış hali — payı garantiye alıyor.
+
+Gerçek anchor fiyatlarıyla doğrulandı:
+
+| Ödenen | Beklenen | Çıkan | Artan |
+|---|---|---|---|
+| 100 TL | 1 | 1 | 1 stroop |
+| 200 TL | 2 | 2 | 3 |
+| 400 TL | 4 | 4 | 7 |
+| 500 TL | 5 | 5 | 9 |
+| 3000 TL | 30 | 30 | 55 |
+
+### Arayüz
+
+Serbest TL girişi kaldırıldı. Kullanıcı **kaç geçiş** istediğini seçiyor,
+tutar çarpımla çıkıyor: `5 × 100 TL = 500 TL`. Seçilen sayı kadar banknot
+simgesi gösteriliyor — nakit sezgisi.
+
+Ek yüklemede kur zincirde kilitli kalır; kullanıcının geçiş başına ödediği TL
+piyasa oynasa da değişmez.

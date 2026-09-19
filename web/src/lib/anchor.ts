@@ -129,8 +129,16 @@ export async function requestQuote(s: Session, ep: Endpoints, sellAmountTry: str
       context: 'sep6',
     }),
   });
+  // `price` spread'i HARIC tutar; kullanicinin gercekte odedigi kur
+  // `total_price`tir. Gecis ucretini `price` ile hesaplamak, yatirilan TL'nin
+  // odedigi gecis sayisindan az gecis vermesine yol aciyordu (500 TL -> 4).
   return asJson(res, 'SEP-38 quote') as Promise<{
-    id: string; price: string; buy_amount: string; sell_amount: string; expires_at: string;
+    id: string;
+    price: string;
+    total_price: string;
+    buy_amount: string;
+    sell_amount: string;
+    expires_at: string;
   }>;
 }
 
@@ -194,7 +202,9 @@ export async function waitForCompletion(
   ep: Endpoints,
   id: string,
   onStatus?: (t: AnchorTx) => void,
-  timeoutMs = 90_000,
+  // Anchor yogunken `pending_anchor` durumu bir dakikayi asabiliyor; sahnede
+  // erken pes etmektense beklemek iyi.
+  timeoutMs = 180_000,
 ) {
   const started = Date.now();
   let last: string | null = null;

@@ -32,8 +32,9 @@ export const CONFIG = {
   // Demo etkinliginde iki fiziksel kapi kayitli: M307 ve M308. Kapiyi
   // kullanici secer; `assign_gate` yalnizca oneri olarak durur.
   eventId: env.VITE_EVENT_ID ?? DEPLOYMENT.eventId,
-  depositTry: env.VITE_DEPOSIT_TRY ?? '500',
+  // Bir gecis = bir banknot. Tutar her zaman gecis sayisi x bu ucret.
   fareTryKurus: Number(env.VITE_FARE_TRY_KURUS ?? 10_000),
+  defaultPasses: Number(env.VITE_DEFAULT_PASSES ?? 3),
 
   // Yatirma limitleri. Anchor bunlari SEP-6 `/info` ya da `/health` uzerinden
   // BEYAN ETMIYOR (ikisi de bos donuyor), bu yuzden belgelenmis degerleri

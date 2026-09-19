@@ -40,7 +40,9 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   const [gates, setGates] = useState<GateInfo[] | null>(null);
   const [gate, setGate] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
-  const [amount, setAmount] = useState(CONFIG.depositTry);
+  // Fiyatlandirma banknot mantigi: bir gecis = bir banknot = bir gecis ucreti.
+  // Kullanici kac gecis istedigini secer, tutar carpimla cikar.
+  const [passes, setPasses] = useState(CONFIG.defaultPasses);
   const [open, setOpen] = useState<ChainAccount | null>(null);
   const saved = useMemo(() => savedWristbandAddress(), []);
 
@@ -69,27 +71,10 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
 
   const started = useMemo(() => steps.some((s) => s.state !== 'bekliyor'), [steps]);
 
-  // Tutar kontrolu: anchor limitleri ve "en az bir gecis" kurali.
-  //
-  // Gecis sayisi TL / ucret degildir. TL once USDC'ye cevrilir (anchor'in ALIS
-  // kuru), ucret ise USDC olarak SEP-38 kuruyla hesaplanir; aradaki makas
-  // kadar kayip olur. Burada yaklasik gosteriyoruz — kesin sayi kur
-  // kilitlendiginde belli olur ve bilette yazar. Kasten asagi yuvarliyoruz:
-  // eksik soz vermek, fazla soz verip kapida mahcup olmaktan iyidir.
-  const SPREAD_HAIRCUT = 0.985;
-  const amountTry = Number(amount.replace(',', '.'));
-  const uses = Number.isFinite(amountTry)
-    ? Math.floor((amountTry * SPREAD_HAIRCUT * 100) / CONFIG.fareTryKurus)
-    : 0;
-  const amountError = !Number.isFinite(amountTry) || amountTry <= 0
-    ? 'Geçerli bir tutar gir.'
-    : amountTry < CONFIG.minDepositTry
-      ? `En az ${CONFIG.minDepositTry} TL yüklenebilir.`
-      : amountTry > CONFIG.maxDepositTry
-        ? `En fazla ${CONFIG.maxDepositTry.toLocaleString('tr-TR')} TL yüklenebilir.`
-        : uses < 1
-          ? 'Bu tutar bir geçişe bile yetmiyor.'
-          : null;
+  const fareTry = CONFIG.fareTryKurus / 100;                 // bir geçişin TL fiyatı
+  const amountTry = passes * fareTry;                        // toplam, tam sayı
+  const maxPasses = Math.floor(CONFIG.maxDepositTry / fareTry);
+  const minPasses = Math.max(1, Math.ceil(CONFIG.minDepositTry / fareTry));
 
   const emit = useCallback((id: StepId, state: StepState, detail?: string) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, state, detail: detail ?? s.detail } : s)));
@@ -118,7 +103,7 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
     setBusy(true);
     setSteps(INITIAL_STEPS);
     try {
-      const t = await runTopUp(signer, gate, String(amountTry), emit);
+      const t = await runTopUp(signer, gate, passes, emit);
       setTicket(t);
       onTicket?.(t);
       void loadGates();
@@ -217,41 +202,47 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
 
       {signer && !ticket && (
         <>
-          <label className="amount-field">
-            <span className="amount-label">Ne kadar yükleyeceksin?</span>
-            <span className="amount-input">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amount}
-                disabled={busy}
-                onChange={(e) => setAmount(e.currentTarget.value)}
-                aria-label="Yüklenecek tutar"
-              />
-              <span className="c">TL</span>
-            </span>
-          </label>
-          <div className="amount-quick">
-            {['250', '500', '1000'].map((v) => (
+          <div className="buy">
+            <span className="buy-label">Kaç geçiş alacaksın?</span>
+            <div className="buy-row">
               <button
-                key={v}
                 type="button"
-                className="chip"
-                aria-pressed={amount === v}
-                disabled={busy}
-                onClick={() => setAmount(v)}
+                className="step"
+                aria-label="Bir azalt"
+                disabled={busy || passes <= minPasses}
+                onClick={() => setPasses((n) => Math.max(minPasses, n - 1))}
               >
-                {Number(v).toLocaleString('tr-TR')}
+                −
               </button>
-            ))}
+              <span className="buy-count">
+                <b>{passes}</b>
+                <small>geçiş</small>
+              </span>
+              <button
+                type="button"
+                className="step"
+                aria-label="Bir artır"
+                disabled={busy || passes >= maxPasses}
+                onClick={() => setPasses((n) => Math.min(maxPasses, n + 1))}
+              >
+                +
+              </button>
+            </div>
+            {/* Her gecis bir banknot — sayiyi gozle saymak icin. */}
+            <div className="buy-notes" aria-hidden="true">
+              {Array.from({ length: Math.min(passes, 12) }, (_, i) => (
+                <span key={i} className="note" />
+              ))}
+              {passes > 12 && <span className="note-more">+{passes - 12}</span>}
+            </div>
+            <p className="buy-math">
+              {passes} × {fareTry} TL = <b>{amountTry.toLocaleString('tr-TR')} TL</b>
+            </p>
           </div>
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(CONFIG.fareTryKurus)}</dd>
-            <dt>{open ? 'Eklenecek hak' : 'Geçiş hakkı'}</dt>
-            <dd>{amountError ? '—' : `≈ ${uses} geçiş`}</dd>
             <dt>Etkinlik</dt><dd>{CONFIG.eventId}</dd>
           </dl>
-          {amountError && <p className="amount-warn">{amountError}</p>}
 
           {open ? (
             <div className="open-note">
@@ -264,12 +255,14 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
             <GatePicker gates={gates} chosen={gate} busy={busy} onPick={setGate} />
           )}
 
-          <button className="primary" onClick={topUp} disabled={busy || !gate || !!amountError}>
+          <button className="primary" onClick={topUp} disabled={busy || !gate}>
             {busy
               ? 'Yükleniyor…'
               : open
-                ? `Bakiye ekle — ${gateLabelOf(gates, open.gate)}`
-                : gate ? `Yükle — ${gateLabelOf(gates, gate)}` : 'Kapı seç'}
+                ? `${amountTry.toLocaleString('tr-TR')} TL ekle`
+                : gate
+                  ? `${amountTry.toLocaleString('tr-TR')} TL öde — ${gateLabelOf(gates, gate)}`
+                  : 'Kapı seç'}
           </button>
           {open && (
             <button className="link-btn danger" onClick={release} disabled={busy}>
@@ -318,7 +311,11 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(ticket.bundle.fare_try)}</dd>
             <dt>Kilitli kur</dt><dd>1 USDC = {formatRate(ticket.bundle.rate)} ₺</dd>
-            <dt>Yatırılan</dt><dd>{Number(ticket.depositTry).toLocaleString('tr-TR')} TL</dd>
+            <dt>Ödenen</dt>
+            <dd>
+              {ticket.bundle.max_uses} × {formatTry(ticket.bundle.fare_try)} ={' '}
+              {Number(ticket.depositTry).toLocaleString('tr-TR')} TL
+            </dd>
             {ticket.bankReference && (<><dt>Banka referansı</dt><dd className="mono">{ticket.bankReference}</dd></>)}
           </dl>
           <button className="primary" onClick={copy}>
