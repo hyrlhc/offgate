@@ -3,7 +3,7 @@
 > Hepsi **Stellar Testnet**. Gerçek para yok.
 > Network passphrase: `Test SDF Network ; September 2015`
 
-Son güncelleme: 19 Eylül 2026 — Paket 1 sonu
+Son güncelleme: 19 Eylül 2026 — Paket 2 sonu
 
 ## Kontrat
 
@@ -68,3 +68,34 @@ stellar contract invoke --id CAQORKDWXS4MQNMOYQ6AMRVZWMBAGSQYXQQF5P3TV7AUBSND6NR
 curl -s https://horizon-testnet.stellar.org/accounts/GCE2P4ZJAC2FWNJIDMA7DXKM5UUIVHPQ36NKY2PLNLM4QXGF7TV4K7QS \
   | jq '.balances[] | select(.asset_code=="USDC")'
 ```
+
+## Paket 2 — anchor akışı kanıtı
+
+`node scripts/01-anchor-flow.mjs` ile üretildi.
+
+| Alan | Değer |
+|---|---|
+| Yatırılan | 500.00 TRY |
+| Alınan | 10.1980454 USDC |
+| Kilitli kur (SEP-38) | 1 USDC = 48.785078 TRY |
+| Anchor emir no | `sep_rqfwubo3cp7lcwau39jz` |
+| Ödeme yolu | SEP-6 **deposit-exchange** (quote_id ile kur kilitli) |
+| Banka referansı | `TRMA-QY34-AHDG` (EFT açıklamasına yazılan kod) |
+| Zincir işlemi | `1f0b02e9bcb876874bd016358eef6b15ad4f67ff9a9294d62e38525ed83cec19` |
+| Gezgin | https://stellar.expert/explorer/testnet/tx/1f0b02e9bcb876874bd016358eef6b15ad4f67ff9a9294d62e38525ed83cec19 |
+
+### Entegrasyon notları
+
+- **Hiçbir endpoint kodda sabit değil.** Hepsi SEP-1 (`/.well-known/stellar.toml`)
+  üzerinden keşfediliyor. Başka bir anchor'a geçmek için tek değişen şey home domain.
+- **SEP-10 challenge doğrulaması:** gelen challenge işleminin anchor'ın `SIGNING_KEY`'i
+  tarafından imzalandığı kontrol ediliyor (ortadaki adam koruması). JWT 401 dönerse
+  oturum kendini bir kez yeniliyor.
+- **SEP-6 `deposit-exchange`** kullanılıyor, düz `deposit` değil. `quote_id` ile kur
+  kilitleniyor; biletin TL fiyatı bu andan itibaren sabit. Düz `deposit` yalnızca
+  yedek yol olarak kodda duruyor.
+- **Parametre biçimi:** `destination_asset` düz varlık kodu (`USDC`),
+  `source_asset` SEP-38 biçimi (`iso4217:TRY`). SEP-38 biçimi ikisinde de
+  kullanılırsa anchor 400 döner.
+- **`simulate-bank-transfer` yalnızca mock anchor'da vardır.** Gerçekte kullanıcı
+  EFT açıklamasına referans kodunu yazar, anchor ödemeyi Stellar hesabıyla eşleştirir.

@@ -15,8 +15,9 @@ Organizatör TL olarak tahsil eder.
 |---|---|
 | P0 Tezgah kurulumu | ✅ |
 | P1 Zincir kimliği + deploy | ✅ |
-| P2 Anchor akışı (SEP-10/38/6) | ⏳ sırada |
-| P3–P13 | ⬜ |
+| P2 Anchor akışı (SEP-1/10/38/6) | ✅ |
+| P3 Kontrat v1 (lock_float) | ⏳ sırada |
+| P4–P13 | ⬜ |
 
 **Contract ID:** `CAQORKDWXS4MQNMOYQ6AMRVZWMBAGSQYXQQF5P3TV7AUBSND6NRACXYT` (testnet)
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
