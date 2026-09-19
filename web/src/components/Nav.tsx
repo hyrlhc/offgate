@@ -1,0 +1,14 @@
+/** Uc sekme: demo, anlatim, denetim. */
+export default function Nav({ active }: { active: 'demo' | 'nasil' | 'audit' }) {
+  return (
+    <nav className="nav">
+      <a className="nav-brand" href="#"><span className="dot" />OffGate</a>
+      <div className="nav-links">
+        <a href="#" className={active === 'demo' ? 'on' : ''}>Demo</a>
+        <a href="#nasil" className={active === 'nasil' ? 'on' : ''}>Nasıl çalışır</a>
+        <a href="#audit" className={active === 'audit' ? 'on' : ''}>Denetim</a>
+      </div>
+      <span className="nav-tag">testnet</span>
+    </nav>
+  );
+}

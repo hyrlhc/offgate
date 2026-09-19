@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import Nav from './components/Nav.tsx';
 import { CONFIG, expertContract, formatTry } from './config.ts';
 import { declaredOf, gateLoad, gatesOf, settledOf, statsOf, stroopsToUsdc } from './lib/contract.ts';
 
@@ -44,12 +45,13 @@ export default function Audit() {
   const matches = totals ? totals.declared === totals.settled : true;
 
   return (
-    <div className="shell">
-      <header className="brand">
-        <h1>OffGate</h1>
-        <span className="tag">denetim</span>
-      </header>
-      <p className="sub">Kapı beyanı ile zincirdeki kayıt yan yana. Etkinlik {CONFIG.eventId}.</p>
+    <div className="page">
+      <Nav active="audit" />
+      <div className="doc-head compact">
+        <span className="eyebrow">Etkinlik {CONFIG.eventId}</span>
+        <h1>Denetim</h1>
+        <p className="lede">Kapının kendi beyanı ile zincirdeki kayıt yan yana.</p>
+      </div>
 
       {error && <div className="err-box">{error}</div>}
 
@@ -108,7 +110,7 @@ export default function Audit() {
         <button onClick={() => void load()} disabled={loading}>
           {loading ? 'Okunuyor…' : 'Yenile'}
         </button>
-        <a href="#"><button className="ghost" style={{ width: '100%' }}>Yükleme ekranı</button></a>
+        <a href="#"><button className="ghost" style={{ width: '100%' }}>Demoya dön</button></a>
       </div>
 
       <footer>
