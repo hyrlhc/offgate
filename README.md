@@ -21,8 +21,11 @@ Organizatör TL olarak tahsil eder.
 | P5 Kontrat testleri | ✅ (26 test) |
 | P6 Web — online akış | ✅ |
 | P7 Fiş defteri + bundle | ✅ |
-| P8 ESP32 firmware | ⏳ sırada |
-| P9–P13 | ⬜ |
+| P8 ESP32 firmware | ✅ (HTTP katmanı P11'de) |
+| P9 Settle köprüsü + withdraw | ✅ |
+| P10 Denetim ekranı | ✅ |
+| P11 Uçtan uca prova | ⏳ sırada |
+| P12–P13 | ⬜ |
 
 **Contract ID:** `CBXZ34NZR2R7TVHFGKJZYSIVFBXSYJ5UM2QQ67NQC6ZRPVW5VNPC42BL` (testnet)
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)

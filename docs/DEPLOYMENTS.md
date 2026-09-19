@@ -261,3 +261,83 @@ doğrulanacak.
 | `lock_float_enforces_load_balance_on_chain` | Yük dengesi zincirde zorunlu |
 | `stats_reveal_underreporting_gate` | Eksik beyan denetimde görünüyor |
 | `canonical_message_matches_javascript_vector` | Rust ve JS bayt-bayt aynı |
+
+## Paket 8 — kapı donanımı
+
+ESP32 açılışta `docs/test-vector.md`'ye karşı öz-test çalıştırır. Seri port çıktısı:
+
+```
+OffGate — kanonik format öz-testi
+  ✓ fiş kanonik baytları (67) doğru
+  ✓ Ed25519 doğrulaması geçti (97 ms)
+  ✓ bozuk imza reddedildi
+  ✓ entitlement kanonik baytları (138) doğru
+  ✓ SHA-256 ent_hash doğru
+OffGate kapı hazır
+  kapı     : M308
+  wifi     : OFFGATE-M308 (şifresiz)
+  adres    : http://192.168.4.1
+  internet : YOK — doğrulama tamamen yerel
+  öz-test  : GEÇTI
+```
+
+Böylece **dört platform da aynı baytı üretiyor**: Soroban (Rust), Node, tarayıcı, ESP32.
+
+| Ölçüm | Değer |
+|---|---|
+| Ed25519 doğrulama | 97 ms |
+| RAM | %14.1 (46 KB / 320 KB) |
+| Flash | %62.4 (817 KB / 1.3 MB) |
+
+Kapı kimliği derleme bayrağında (`-DOFFGATE_GATE_ID='"M308"'`) — aynı firmware
+farklı kapılara farklı kimlikle yüklenir.
+
+## Paket 9 — görevli senkronizasyonu ve TL çıkışı
+
+### `node scripts/02-settle.mjs`
+
+```
+kapı M308 · beyan 3 geçiş · 3 fiş
+3/3 fiş yerel doğrulamadan geçti
+settle       -> 3 fiş kabul  ·  b895867afacc364b9adf25ffc0744ef1d152bf4e27cb87ce4f495efd93e46855
+gate_report  -> kapı 3 geçiş beyan etti  ·  0cb88626f200784309d14a1d1e61d95e85c1927933a48847ec0d07f961a7c007
+stats(EVT1)  -> beyan 6 · zincirde 6 · hasılat 12.2988426 USDC   ✓ tutuyor
+```
+
+Script fişleri **zincire yazmadan önce yerel olarak doğrular**. Geçersiz imza
+sözleşmede tüm batch'i durdurduğu için, bozuk fiş burada elenip sebebi gösterilir.
+Kaynak esnek: canlı kapı (`--from http://192.168.4.1`), kaydedilmiş dosya, ya da
+başka bir aktarım — fişler kendi kendini doğruladığı için kaynağın güvenilir
+olması gerekmiyor.
+
+### `node scripts/03-withdraw.mjs`
+
+```
+operatör bakiyesi : 12.2988426 USDC
+SEP-6 withdraw    : sep_0kt4lsb6yfnox7k2ik1g
+hedef             : GCLCZEQZ2THTEDAOFI66LACNPLY4OBKN7VKLEZFMBIHYKYQOW2W7T3Z6
+memo              : 842492621887 (id)
+USDC ödemesi      : 4e4accc0fec4864438a53806cd3d7a3befdd5e05f41aff3a96a05c0c04453593
+durum             : pending_user_transfer_start -> completed
+ödenen            : 596.99 TRY
+kalan bakiye      : 0.0000000 USDC
+```
+
+**Tam döngü kapandı:** 500 TRY → USDC → sözleşmede kilitli → internetsiz geçişler
+→ fişler zincire → hasılat operatöre → **596.99 TRY** operatörün banka hesabında.
+
+Memo zorunlu tutuluyor: anchor memo döndürmezse script ödemeyi göndermeden duruyor.
+
+## Paket 10 — denetim ekranı
+
+Web uygulamasında `#audit`. Zincirden okunan canlı veri:
+
+| Kapı | Beyan | Zincirde | Fark | Yük |
+|---|---|---|---|---|
+| M307 | 3 | 3 | 0 ✓ | 1 |
+| M308 | 3 | 3 | 0 ✓ | 1 |
+| M309 | 0 | 0 | 0 ✓ | 0 |
+| **Toplam** | **6** | **6** | **0 ✓** | hasılat 12.2988426 USDC |
+
+Kapı sayacı `gate_report` ile, fişler `settle` ile zincire yazılır. İki sayı
+bağımsız kaynaklardan gelir; operatör yalnızca birini eksiltemez.

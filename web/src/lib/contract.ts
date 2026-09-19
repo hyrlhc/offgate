@@ -154,8 +154,17 @@ export const usesLeft = (user: string) =>
 export const gateLoad = (gate: string, from: string) =>
   readContract<number>('gate_load', [symbolArg(gate)], from);
 
-export const statsOf = (from: string) =>
+export const statsOf = (from = CONFIG.readAccount) =>
   readContract<[number, number, bigint]>('stats', [symbolArg(CONFIG.eventId)], from);
+
+export const gatesOf = (from = CONFIG.readAccount) =>
+  readContract<string[]>('gates_of', [symbolArg(CONFIG.eventId)], from);
+
+export const declaredOf = (gate: string, from = CONFIG.readAccount) =>
+  readContract<number>('declared_of', [symbolArg(gate)], from);
+
+export const settledOf = (gate: string, from = CONFIG.readAccount) =>
+  readContract<number>('settled_of', [symbolArg(gate)], from);
 
 export function lockFloat(
   signer: Signer,

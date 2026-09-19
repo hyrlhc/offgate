@@ -184,7 +184,7 @@ export default function App() {
       )}
 
       <footer>
-        Stellar Testnet · gerçek para hareketi yoktur<br />
+        <a href="#audit">Denetim ekranı</a> · Stellar Testnet · gerçek para hareketi yoktur<br />
         Sözleşme <span className="mono">{short(CONFIG.contractId, 6, 4)}</span> ·
         {' '}anchor <span className="mono">{CONFIG.anchorHomeDomain}</span>
       </footer>

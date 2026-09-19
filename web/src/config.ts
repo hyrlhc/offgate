@@ -24,6 +24,10 @@ export const CONFIG = {
   // uctan uca testte gelistirme sunucusunun adresi verilir.
   apiBase: env.VITE_API_BASE ?? '',
 
+  // Imzasiz okuma cagrilari icin kaynak hesap. Simulasyon bir var olan
+  // hesap istiyor; bu adres herkese acik bilgidir, gizli hicbir sey icermez.
+  readAccount: env.VITE_READ_ACCOUNT ?? 'GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ',
+
   // Demo parametreleri — karar K-3 (docs/OFFGATE-PACKAGES.md)
   eventId: env.VITE_EVENT_ID ?? 'EVT1',
   depositTry: env.VITE_DEPOSIT_TRY ?? '500',
