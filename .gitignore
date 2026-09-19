@@ -6,8 +6,11 @@ dist/
 .DS_Store
 
 # GIZLI — asla commit edilmez
-.env
-.env.local
+.env*
+!.env.example
 *.secret
 keys/
 .devkey.json
+
+# Yerel arac ayarlari — kisisel, depoya girmez
+.claude/settings.local.json

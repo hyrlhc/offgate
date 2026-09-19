@@ -28,6 +28,8 @@ Organizatör TL olarak tahsil eder.
 | P12–P13 | ⬜ |
 
 **Contract ID:** `CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX` (testnet)
+Dağıtım sabitlerinin tek kaynağı: [web/shared/deployment.js](web/shared/deployment.js) —
+sözleşme yeniden dağıtılınca değişecek tek satır orada.
 **Kayıtlı kapılar:** `M307` (Kapı 1) · `M308` (Kapı 2) — kapıyı ve tutarı kullanıcı seçer
 Tüm zincir üstü artefaktlar: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)
 

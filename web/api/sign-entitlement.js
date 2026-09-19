@@ -9,6 +9,7 @@
 
 import { createHash, createPrivateKey, createPublicKey, sign } from 'node:crypto';
 import { Address, BASE_FEE, Contract, StrKey, TransactionBuilder, rpc, scValToNative } from '@stellar/stellar-sdk';
+import { DEPLOYMENT } from '../shared/deployment.js';
 
 const PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
 const ENT_DOMAIN = Buffer.from('OFFGATE-ENT-v1', 'ascii');
@@ -67,12 +68,12 @@ export function entitlementBytes(e) {
 
 // --- Zincir dogrulamasi ----------------------------------------------------
 
-const CONTRACT_ID = process.env.VITE_CONTRACT_ID
-  ?? 'CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX';
-const RPC_URL = process.env.VITE_RPC_URL ?? 'https://soroban-testnet.stellar.org';
-const NETWORK_PASSPHRASE = process.env.VITE_NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015';
-const READ_ACCOUNT = process.env.VITE_READ_ACCOUNT
-  ?? 'GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ';
+// Varsayilanlar tarayicidakiyle AYNI dosyadan gelir; ikisi ayri yerde
+// tanimli olsaydi sozlesme yeniden dagitildiginda birbirinden kopabilirlerdi.
+const CONTRACT_ID = process.env.VITE_CONTRACT_ID ?? DEPLOYMENT.contractId;
+const RPC_URL = process.env.VITE_RPC_URL ?? DEPLOYMENT.rpcUrl;
+const NETWORK_PASSPHRASE = process.env.VITE_NETWORK_PASSPHRASE ?? DEPLOYMENT.networkPassphrase;
+const READ_ACCOUNT = process.env.VITE_READ_ACCOUNT ?? DEPLOYMENT.readAccount;
 
 /** En fazla 48 saatlik bilet imzalariz. */
 const MAX_TTL_SECONDS = 48 * 3600;

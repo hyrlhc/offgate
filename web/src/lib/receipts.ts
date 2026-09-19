@@ -162,6 +162,3 @@ export function loadOrCreateDeviceKey(owner: string) {
   return { seed, publicKey: getPublicKey(seed) };
 }
 
-export function resetDeviceKey(owner: string) {
-  localStorage.removeItem(deviceKeyStorage(owner));
-}

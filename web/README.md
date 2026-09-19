@@ -4,11 +4,12 @@ Kullanıcının TL yükleyip bilet aldığı online arayüz. Vite + React + Type
 
 ```sh
 npm install
-OPERATOR_SECRET=S... npm run dev      # http://localhost:5173
+npm run dev                           # http://localhost:5173
 npm run build
 ```
 
-`OPERATOR_SECRET` yalnızca sunucu tarafında kullanılır (`api/sign-entitlement.js`),
+`OPERATOR_SECRET`'i geliştirme sunucusu depo kökündeki `.env`'den okur
+(bkz. `vite.config.ts`). Yalnızca sunucu tarafında kullanılır (`api/sign-entitlement.js`),
 `VITE_` öneki almaz ve tarayıcıya hiçbir zaman inmez. Yapılandırılabilir değerler
 için `.env.example`.
 

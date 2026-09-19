@@ -31,8 +31,6 @@ const contract = () => new Contract(CONFIG.contractId);
 export const addressArg = (a: string) => new Address(a).toScVal();
 export const symbolArg = (s: string) => nativeToScVal(s, { type: 'symbol' });
 export const i128Arg = (n: bigint | number | string) => nativeToScVal(BigInt(n), { type: 'i128' });
-export const u32Arg = (n: number) => nativeToScVal(n, { type: 'u32' });
-export const u64Arg = (n: number) => nativeToScVal(BigInt(n), { type: 'u64' });
 export const bytesArg = (hexOrBytes: string | Uint8Array) =>
   xdr.ScVal.scvBytes(
     Buffer.from(typeof hexOrBytes === 'string' ? fromHex(hexOrBytes) : hexOrBytes),
@@ -60,8 +58,6 @@ export async function readContract<T>(method: string, args: xdr.ScVal[], from: s
 }
 
 // --- Yazma -----------------------------------------------------------------
-
-export type SentTx = { hash: string };
 
 /** Hazirla -> cuzdana imzalat -> gonder -> sonuclanana kadar bekle. */
 export async function invokeContract(
@@ -175,9 +171,6 @@ export function contractErrorMessage(err: unknown): string {
 
 // --- OffGate cagrilari -----------------------------------------------------
 
-export const assignGate = (from: string) =>
-  readContract<string>('assign_gate', [symbolArg(CONFIG.eventId)], from);
-
 /** Etkinligin kapilari, zincirdeki anlik yukleriyle. Kapi secimi bunu gosterir. */
 export type GateInfo = { gate: string; load: number };
 
@@ -216,12 +209,6 @@ export function topUp(signer: Signer, o: { amount: bigint; entHash: Uint8Array }
     bytesArg(o.entHash),
   ]);
 }
-
-export const floatOf = (user: string) =>
-  readContract<bigint>('float_of', [addressArg(user)], user);
-
-export const usesLeft = (user: string) =>
-  readContract<number>('uses_left', [addressArg(user)], user);
 
 export const gateLoad = (gate: string, from: string) =>
   readContract<number>('gate_load', [symbolArg(gate)], from);

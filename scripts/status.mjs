@@ -44,7 +44,11 @@ try {
   const h = await (await fetch(`https://${ANCHOR_HOME_DOMAIN}/health`, { signal: AbortSignal.timeout(8000) })).json();
   ok(`${ANCHOR_HOME_DOMAIN} ayakta`);
   info(`kur     : 1 ${USDC_CODE} = ${h.rates.sell_rate} TRY (satis) · kaynak ${h.rates.source}`);
-  info(`limitler: ${h.limits.min_onramp_try}–${h.limits.max_onramp_try} TRY · offramp min ${h.limits.min_offramp_usdc}`);
+  // Anchor limitleri artik `null` donduruyor; beyan edilmeyince uydurmuyoruz.
+  const lim = h.limits ?? {};
+  info(lim.min_onramp_try != null
+    ? `limitler: ${lim.min_onramp_try}–${lim.max_onramp_try} TRY · offramp min ${lim.min_offramp_usdc}`
+    : 'limitler: anchor beyan etmiyor — istemci belgelenmis 50–3000 TRY uyguluyor');
   info(`hazine  : ${h.treasury.usdc_balance} ${USDC_CODE}`);
 } catch (e) {
   warn(`anchor okunamadi: ${e.message}`);

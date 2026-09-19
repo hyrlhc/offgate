@@ -27,7 +27,7 @@ export const ACCOUNTS = {
 
 // Demo parametreleri — karar K-3 (docs/OFFGATE-PACKAGES.md)
 export const DEMO = {
-  eventId: process.env.DEMO_EVENT_ID ?? 'EVT1',
+  eventId: process.env.DEMO_EVENT_ID ?? 'FEST26',
   depositTry: process.env.DEMO_DEPOSIT_TRY ?? '500',
   fareTryKurus: Number(process.env.DEMO_FARE_TRY_KURUS ?? 10000),
   maxUses: Number(process.env.DEMO_MAX_USES ?? 5),

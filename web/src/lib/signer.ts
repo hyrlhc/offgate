@@ -111,12 +111,6 @@ export async function createWristband(
   };
 }
 
-export function forgetWristband() {
-  localStorage.removeItem(WRISTBAND_STORAGE);
-}
-
-export const hasWristband = () => localStorage.getItem(WRISTBAND_STORAGE) !== null;
-
 /** Kayitli bilekligin adresi — uretmeden, fonlamadan, sadece bakmak icin. */
 export function savedWristbandAddress(): string | null {
   const secret = localStorage.getItem(WRISTBAND_STORAGE);
@@ -128,8 +122,3 @@ export function savedWristbandAddress(): string | null {
   }
 }
 
-/** Tarayiciya enjekte edilmis bir cuzdan var mi (masaustu eklentisi). */
-export function looksLikeDesktopWallet() {
-  const w = window as unknown as Record<string, unknown>;
-  return Boolean(w.freighter ?? w.freighterApi ?? w.rabet ?? w.albedo);
-}
