@@ -1,783 +1,784 @@
 # OffGate
 
-**İnternetsiz geçiş ve ödeme altyapısı · Stellar üzerinde**
+Offline payment and access control on Stellar. A turnstile with no internet
+connection and no secret key verifies that a ticket was paid for, refuses a
+receipt that has already been used, and settles the revenue on chain when
+connectivity returns. Hardware cost per gate is one ESP32.
 
-`Rise In × Stellar Pro Hackathon 2026` · **Genesis Track**
+Built for the Rise In x Stellar Pro Hackathon 2026, Genesis track.
 
-🇹🇷 Türkçe · [🇬🇧 English](README.en.md)
+[Türkçe](README.tr.md)
 
 | | |
 |---|---|
-| **Canlı uygulama** | https://offgate.vercel.app · arayüz İngilizce, üst çubuktan TR |
-| **Sözleşme (testnet)** | [`CAYBDH2A…NHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
-| **Donanım** | 2 × ESP32 — `M307` (Kapı 1), `M308` (Kapı 2) |
-| **Ağ** | Stellar Testnet · gerçek para hareketi yoktur |
+| Live application | https://offgate.vercel.app (English by default, TR switch in the top bar) |
+| Contract | [`CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
+| Network | Stellar Testnet |
+| Hardware | 2 x ESP32, gates `M307` and `M308` |
+| Source | https://github.com/hyrlhc/offgate |
 
 ---
 
-## Problem
+## The problem
 
-Festival, stadyum, metro, kapalı etkinlik alanı. Binlerce kişi, tek bir
-kapıdan geçmeye çalışıyor. Ve tam o anda:
+Paid access points, such as festival entrances, stadium gates and transit
+turnstiles, authorise payments online. The terminal contacts a server, the
+server answers, the gate opens. Three consequences follow.
 
-- Hücresel ağ çöküyor — yoğunlukta ilk ölen şey budur.
-- POS cihazı çevrimiçi onay bekliyor, kuyruk büyüyor.
-- Kapı başına maliyet yüzlerce dolar.
+First, the moment of highest demand is the moment the network is least
+available. Cell sites saturate when several thousand people stand in the same
+place. The gate that must work hardest is the one most likely to be offline.
 
-Mevcut sistemlerin ortak varsayımı şu: **turnike ödeme anında internete
-bağlıdır.** Bu varsayım yoğunlukta her seferinde kırılıyor.
+Second, latency is paid per person. An online authorisation round trip of a few
+hundred milliseconds is invisible to one user and becomes a queue at a thousand.
 
-## Çözüm
+Third, hardware cost per gate is high enough that operators install few gates,
+which concentrates the queue further.
 
-OffGate bu varsayımı kaldırıyor. Turnike **internete hiç bağlanmıyor.**
-İçinde hiçbir gizli anahtar yok. Yine de:
+There is also an accounting consequence. When the network fails, venues fall
+back to cash. Revenue then depends on what the operator declares, and the
+declaration cannot be checked against an independent record.
 
-- Biletin gerçekten ödenmiş olduğunu **kendi başına** kanıtlıyor,
-- Aynı fişin ikinci kez kullanılmasını **engelliyor**,
-- Yan kapıyla konuşup **başka kapının biletini** kabul edebiliyor,
-- Kapı başına maliyeti **bir ESP32** (~5 USD).
+## The approach
 
-Para tarafı tamamen Stellar üzerinde: kullanıcı TL yatırır, anchor üzerinden
-USDC alır, Soroban sözleşmesine kilitler. Organizatör geçişleri zincire yazıp
-hasılatı TL olarak bankasına çeker.
+OffGate removes the online authorisation step. The user's balance is locked in a
+Soroban contract before they arrive. The contract records who locked it, which
+gate it is bound to, the fare, and the exchange rate at the time of locking. The
+operator signs a statement of that lock with an Ed25519 key. The user's browser
+pre-signs one receipt per pass while still online.
 
-**Tam döngü kapalıdır ve testnet'te uçtan uca çalıştırılmıştır:**
-`500 TRY → 10.198 USDC → sözleşmede kilitli → internetsiz geçişler → fişler zincire → 596.99 TRY operatörün banka hesabında`
+At the gate, the user transfers a bundle containing the signed statement and the
+receipts. The gate verifies two signatures against keys it already holds, checks
+its local ledger for reuse, and opens. No network is involved.
+
+The firmware contains no secret key. It holds only the operator's public key, so
+opening the device and reading its flash does not allow forging a ticket.
+
+When connectivity returns, receipts are written on chain, the revenue moves to
+the operator, and the operator withdraws it as Turkish lira through the anchor.
+The full loop has been executed on testnet:
+
+```
+500 TRY -> 10.198 USDC -> locked in contract -> offline passes
+       -> receipts on chain -> 596.99 TRY in the operator's bank account
+```
 
 ---
 
-## Mimari
+## Architecture
 
 ```mermaid
 flowchart TB
-    subgraph online["🌐 ÇEVRİMİÇİ — bilet alma (telefon, internet var)"]
-        U["👤 Kullanıcı"]
-        WK["Stellar Wallets Kit<br/><i>entegrasyon ortağı</i>"]
-        AN["Anchor<br/>SEP-1 · SEP-10 · SEP-38 · SEP-6"]
-        OP["Operatör imza ucu<br/><i>sunucu tarafı</i>"]
-        SC["Soroban sözleşmesi<br/><code>lock_float</code> · <code>top_up</code>"]
+    subgraph online["ONLINE - buying a ticket"]
+        U["User"]
+        WK["Stellar Wallets Kit<br/>integration partner"]
+        AN["Anchor<br/>SEP-1, SEP-10, SEP-38, SEP-6"]
+        OP["Operator signing endpoint<br/>server side"]
+        SC["Soroban contract<br/>lock_float, top_up"]
 
-        U -->|"cüzdan bağla"| WK
-        WK -->|"tek imza"| SC
-        U -->|"TL yatır"| AN
+        U -->|"connect wallet"| WK
+        WK -->|"one signature"| SC
+        U -->|"deposit TRY"| AN
         AN -->|"USDC"| U
-        SC -->|"zincirdeki kilidi oku"| OP
-        OP -->|"imzalı bilet"| U
+        SC -->|"read the on-chain lock"| OP
+        OP -->|"signed entitlement"| U
     end
 
-    U ==>|"📦 paket: bilet + N ön-imzalı fiş<br/>gizli anahtar İÇERMEZ"| P
+    U ==>|"bundle: entitlement plus N pre-signed receipts, no secret key"| P
 
-    subgraph offline["📴 ÇEVRİMDIŞI — geçiş (internet YOK)"]
-        P["📱 Telefon<br/><i>uçak modu</i>"]
-        G1["🚪 Kapı M307<br/>ESP32"]
-        G2["🚪 Kapı M308<br/>ESP32"]
+    subgraph offline["OFFLINE - passing through"]
+        P["Phone, airplane mode"]
+        G1["Gate M307<br/>ESP32, fare 100 TRY"]
+        G2["Gate M308<br/>ESP32, fare 80 TRY"]
 
-        P -->|"wifi · HTTP"| G1
-        P -->|"wifi · HTTP"| G2
-        G1 <-.->|"ESP-NOW<br/>imzalı harcama kaydı<br/>+ uzaktan izin"| G2
+        P -->|"local wifi, HTTP"| G1
+        P -->|"local wifi, HTTP"| G2
+        G1 <-.->|"ESP-NOW: spend records, remote approval"| G2
     end
 
-    subgraph settle["💰 SENKRONİZASYON — görevli, gün sonu"]
-        SY["Görevli laptopu"]
-        SC2["<code>settle</code> + <code>gate_report</code>"]
-        BK["🏦 Operatörün bankası"]
+    subgraph chain["SETTLEMENT"]
+        CA["settle, permissionless"]
+        BK["Operator bank account"]
 
-        SY --> SC2
-        SC2 -->|"SEP-6 withdraw"| BK
+        CA -->|"SEP-6 withdraw"| BK
     end
 
-    G1 -->|"biriken fişler"| SY
-    G2 -->|"biriken fişler"| SY
+    G1 -->|"signed collection vouchers"| P
+    G2 -->|"signed collection vouchers"| P
+    P ==>|"the user carries the data and is paid for it"| CA
 
     style offline fill:#1a1a2e,stroke:#e94560,stroke-width:3px,color:#fff
     style online fill:#16213e,stroke:#0f8,stroke-width:2px,color:#fff
-    style settle fill:#0f3460,stroke:#ffd460,stroke-width:2px,color:#fff
+    style chain fill:#0f3460,stroke:#ffd460,stroke-width:2px,color:#fff
 ```
 
 ---
 
-## Sistem dört anahtar üzerine kurulu
+## Trust model
 
-Her şeyi anlamanın en kısa yolu bu tabloyu okumak:
+Four Ed25519 keys, each held in one place.
 
-| Anahtar | Kimde | Ne yapar | Nerede saklanır |
+| Key | Held by | Signs | Storage |
 |---|---|---|---|
-| **Cüzdan anahtarı** | Kullanıcı | Parayı zincire kilitler — **bir kez** | Freighter / Lobstr / Albedo |
-| **Cihaz anahtarı** | Kullanıcının tarayıcısı | Geçiş fişlerini imzalar | `localStorage`, cüzdan başına ayrı |
-| **Operatör anahtarı** | Sunucu | Bileti imzalar | Vercel Secret · tarayıcıya **hiç inmez** |
-| **Kapı anahtarı** | Her ESP32'nin kendisi | Komşuya söylediğini imzalar | ESP32'nin NVS'i |
+| Wallet key | User | The `lock_float` transaction, once | Freighter, Lobstr, Albedo, Rabet or Hana |
+| Device key | User's browser | Pass receipts | `localStorage`, one per wallet address |
+| Operator key | Server | The entitlement | Vercel secret, never sent to the browser |
+| Gate key | Each ESP32 | Collection vouchers, spend records, counter declarations | ESP32 NVS, generated on first boot |
 
-**Turnikenin içinde hiçbir gizli anahtar yoktur.** Yalnızca operatörün *açık*
-anahtarı gömülüdür. Cihaz sökülüp flash'ı okunsa bile sahte bilet üretilemez.
+The gate holds the operator's public key only. It verifies; it holds nothing
+that would let it issue.
 
----
-
-## Uçtan uca akış
-
-### 1 · Çevrimiçi — bilet alma (tek düğme)
-
-Kullanıcı kaç geçiş istediğini seçer. Tutar çarpımla çıkar: `4 × 100 TL = 400 TL`.
-Banknot mantığı — nakit sezgisi, kesir yok.
-
-Arkasında sırayla:
-
-| Adım | Ne oluyor | Protokol |
-|---|---|---|
-| Kapı seçildi | Kullanıcı hangi turnikeden gireceğini **kendisi** seçer | — |
-| USDC güven hattı | Yoksa açılır | Horizon |
-| Cüzdan doğrulandı | Anchor'a kimlik kanıtı | **SEP-10** |
-| Kur kilitlendi | TL/USDC kuru sabitlenir | **SEP-38** |
-| Ödeme talimatı | Banka referans kodu alınır | **SEP-6** `deposit-exchange` |
-| Banka transferi | Kullanıcı EFT yapar | *(demoda `simulate-bank-transfer`)* |
-| USDC hesaba geçti | Anchor ödemeyi yapar | Horizon |
-| Zincire kilitlendi | Seçilen kapıya kilit | Soroban `lock_float` |
-| Bilet imzalandı | Operatör **zincirdeki kilidi okuyup** imzalar | Ed25519 |
-| Fişler hazırlandı | N adet fiş önceden imzalanır | Ed25519 |
-
-Çıktı: tek bir base64 **paket**. İçinde bilet + N adet imzalı fiş var,
-**hiçbir gizli anahtar yok**.
-
-### 2 · Çevrimdışı — geçiş
-
-Kullanıcı kapının wifi'sine bağlanır (`OFFGATE-M307`, şifresiz). Captive
-portal ödeme sayfasını açar. Paket bir kez yapıştırılır, sonraki geçişler tek tuş.
-
-Kapı sırayla şunları doğrular — **hepsi yerel, internet yok:**
-
-1. Bilet operatör tarafından mı imzalanmış? *(gömülü açık anahtarla)*
-2. Fiş bu bilete mi ait? *(`ent_hash` eşleşmesi)*
-3. Fişi kullanıcının cihaz anahtarı mı imzalamış?
-4. Sıra numarası hak sınırında mı?
-5. **Bu fiş daha önce harcanmış mı?** *(NVS'teki defter)*
-
-Hepsi geçerse: **önce fiş yakılır, sonra kapı açılır.** Bu sıra tesadüf değil.
-
-### 3 · Senkronizasyon — gün sonu
-
-Görevli kapıdan fişleri çeker, `settle` ile zincire yazar, hasılat operatöre
-geçer. `gate_report` ile kapının kendi sayacı da zincire yazılır — iki sayı
-**bağımsız kaynaklardan** gelir, operatör yalnızca birini eksiltemez.
+The device key exists because a browser wallet extension cannot sign raw bytes
+on a phone in airplane mode. `lock_float` writes the device public key on chain,
+which delegates receipt signing to it. The wallet's own key never reaches the
+offline side of the phone.
 
 ---
 
-## Çifte harcama nasıl engelleniyor
+## Flow
 
-Bu sistemin kalbi. Üç katman var:
+### Buying a ticket, online
 
-**1 · Sıra numarası.** Her fiş `seq = 1..N` taşır ve imza `seq`'i kapsar.
-Fişi kopyalayıp `seq`'i değiştiremezsin — imza düşer.
+The user selects a number of passes. The amount is the number of passes times
+the fare, plus a 5 percent deposit. For three passes at 100 TRY the total is
+315.00 TRY.
 
-**2 · Kapının yerel defteri.** Kabul edilen her `(ent_hash, seq)` çifti NVS'e
-yazılır. Elektrik kesilse bile kalır. Aynı fiş ikinci kez gelirse **3 ms**
-içinde reddedilir.
-
-**3 · Kapılar arası defter paylaşımı.** Bir kapının kabul ettiği fişi diğer
-kapı da öğrenir — imzalı, doğrudan radyo üzerinden.
-
-> **Kritik nokta:** Çifte harcamayı durduran şey imza değil, **deftere kimin
-> sahip olduğu.** İmza biletin gerçek olduğunu kanıtlar; harcanmış olup
-> olmadığını yalnızca defter bilir.
-
----
-
-## Kapılar arası iletişim — ESP-NOW
-
-İki turnike birbirine **doğrudan** konuşur. Router yok, internet yok, eşleşme yok.
-
-### Her kapının kendi kimliği var
-
-İlk açılışta Ed25519 anahtar çiftini üretir, NVS'e yazar. Söylediği her şeyi
-bu anahtarla imzalar. Turnikenin ilk kez bir şey *imzalaması* — önceden
-yalnızca doğruluyordu.
-
-### İki tür mesaj
-
-**Duyuru (tek yönlü)** — bir geçiş kabul edilince yayılır:
-
-```
-"OFFGATE-GOSSIP-v1"(17) ‖ kapı(16) ‖ ent_hash(32) ‖ seq(4) ‖ sayaç(4) ‖ ts(8)  = 81 bayt
-+ imza(64) + açık anahtar(32)                                                   = 177 bayt
-```
-
-*"Ben M307'yim, şu biletin şu geçişini harcadım."* Komşu doğrular, defterine yazar.
-
-**Soru / onay (çift yönlü)** — kullanıcı **M307 biletiyle M308'e gelirse**:
-
-```
-domain(14) ‖ soran(16) ‖ sorulan(16) ‖ ent_hash(32) ‖ seq(4) ‖ nonce(8) ‖ karar(1)  = 91 bayt
-+ imza(64) + açık anahtar(32)                                                        = 187 bayt
-```
-
-M308 bileti **kendi başına** doğrulayabilir — operatör imzası, cihaz imzası,
-sıra sınırı hepsi elinde. Doğrulayamadığı tek şey: *bu fiş harcandı mı?*
-Çünkü o defter M307'de. Bu yüzden sorar:
-
-1. M308 → M307: *"şu fişi benim için yakar mısın?"* **(imzalı)**
-2. M307 defterine bakar. Boşsa **önce yakar, sonra** imzalı onay döner.
-3. M308 onayı doğrular: imza M307'nin mi · nonce benim sorduğum mu · fiş ve sıra tutuyor mu.
-4. Hepsi tamamsa kapı açılır.
-
-### Neden bu sıra
-
-**Önce yak, sonra onayla** tek doğru sıradır. Tersi olsaydı onay yoldayken
-kullanıcı aynı fişle M307'ye koşabilir, iki kapıdan tek fişle geçerdi.
-
-Bedeli var: cevap kaybolursa fiş yanmış ama geçiş olmamış olur — kullanıcı bir
-hak kaybeder. İkisinden birini seçmek zorundayız ve **çifte harcama daha
-pahalıdır.**
-
-### Sessizlik reddir
-
-M307 cevap vermezse M308 geçirmez. M307 hiç duyulmuyorsa baştan reddeder
-(`home_gate_unheard`). **Ağ koptuğunda sistem kapanır, açılmaz.**
-
-### Güvenlik asimetrisi
-
-| Mesaj | En kötü sonucu | Güven modeli |
-|---|---|---|
-| Duyuru | Fazladan bir **ret** | İlk duyuşta güven yeterli |
-| Soru | Bir hak **eksilir** | Yalnızca önceden tanınan komşudan |
-
-Duyuru kimseye geçiş kazandıramaz, o yüzden gevşek. Soru fiş yakar, o yüzden sıkı.
-
-### Ölçülen performans — gerçek donanım, gerçek imzalar
-
-| Adım | Süre |
+| Step | Mechanism |
 |---|---|
-| Ed25519 doğrulama (tek) | **98 ms** |
-| Kapılar arası onay gidiş-dönüş | **327 ms** |
-| Kendi kapısında geçiş (uçtan uca) | **165–263 ms** |
-| Başka kapıdan geçiş (uçtan uca) | **495–711 ms** |
+| Gate selection | The user chooses the gate; it becomes an argument to `lock_float` |
+| USDC trustline | Opened through Horizon if absent |
+| Authentication | SEP-10 challenge signed by the wallet |
+| Rate lock | SEP-38 quote, using `total_price` |
+| Deposit instruction | SEP-6 `deposit-exchange` with `quote_id` |
+| Bank transfer | The user wires the amount with the reference code. In this demo the mock anchor's `simulate-bank-transfer` stands in |
+| USDC received | Anchor payout, observed on Horizon |
+| Lock | `lock_float` moves USDC into the contract and records gate, fare, rate, device key and entitlement digest |
+| Entitlement signature | The operator reads the on-chain lock, rebuilds the entitlement from it, and signs |
+| Receipt book | The browser signs N receipts, `seq` 1 to N |
 
-### Doğrulanan senaryo matrisi
+The output is a base64 bundle holding the entitlement, the operator signature
+and the receipts. It contains no secret key.
 
-M307 için alınmış 3 geçişlik gerçek bir bilet, iki fiziksel ESP32 üzerinde:
+### Passing a gate, offline
 
-| # | Senaryo | Beklenen | Sonuç |
-|---|---|---|---|
-| 1 | Fiş #1 → **M308** (yabancı kapı) | M307 onay verir, geçiş açılır | ✅ `remote:true` · 332 ms onay |
-| 2 | Fiş #1 → **M307** (kendi kapısı) | Yanmış olmalı | ✅ `already_spent` |
-| 3 | Fiş #2 → **M307** | Normal geçiş | ✅ 165 ms |
-| 4 | Fiş #2 → **M308** | Duyurudan biliyor olmalı | ✅ `already_spent` · 3 ms |
-| 5 | Fiş #3 → **M308** | Uzaktan izin, kabul | ✅ 495 ms |
-| 6 | Fiş #3 → **M308** tekrar | Yerel defter durdurur | ✅ `already_spent` · 3 ms |
+The gate runs an open access point and a captive portal. The bundle is pasted
+once; later passes are a single tap.
 
-**2. satır kritiktir.** Aynı fiş kendi kapısında reddedildi — demek ki M307
-onay vermeden önce fişi gerçekten yakmış. Çifte harcama kapalı.
+The gate checks, in order:
+
+1. Is the entitlement signed by the operator, against the embedded public key
+2. Does the receipt belong to this entitlement, by `ent_hash`
+3. Is the receipt signed by the device key named in the entitlement
+4. Is `seq` within the granted allowance
+5. Has `(ent_hash, seq)` already been spent, against the NVS ledger
+
+If all pass, the receipt is marked spent first and the gate opens second. The
+gate then signs a collection voucher stating the amount it actually charged and
+returns it to the phone.
+
+### Settlement
+
+`settle` is permissionless. Each receipt carries the user's signature, which
+binds the ceiling, and the gate's signature, which binds the amount actually
+charged. Anyone holding the data can submit it, so users submit their own and
+are paid for doing so.
 
 ---
 
-## Para üstü ve veri taşıma ödülü
+## Preventing double spend
 
-Turnikeden geçtiğinde kapı sana **imzalı bir tahsilat belgesi** veriyor:
-*"Ben M308'im, şu fişten 80 TL tahsil ettim."* Bu tek imza üç problemi
-birden çözüyor.
+Three layers, in order of cost.
 
-### 1 · Para üstü
+**Sequence numbers.** Each receipt carries `seq` and the signature covers it.
+Copying a receipt and editing the number invalidates the signature.
 
-Biletin üst sınırı **kullanıcının** imzasında, fiilen tahsil edilen tutar
-**kapının** imzasında. 100 TL'lik hakla 80 TL'lik kapıdan geçersen aradaki
-20 TL bakiyende kalır.
+**The gate's local ledger.** Every accepted `(ent_hash, seq)` is written to NVS,
+which survives power loss. A repeat is rejected in about 3 ms without any
+signature work.
 
-İki imza birbirini kıstırıyor:
+**Cross-gate ledger sharing.** A pass accepted at one gate is announced to its
+neighbours over ESP-NOW, signed by the accepting gate's key.
 
-| Kapı ne yapamaz | Neden |
+What makes this work is not the signature but ownership of the ledger. A
+signature proves a ticket is genuine. Only the ledger knows whether it has been
+used.
+
+If the ledger write fails, for example because NVS is full, the gate does not
+open. This was a real defect: the return value of the NVS write was ignored, so
+a full ledger silently allowed reuse. Both the spend marker and the receipt
+store now check their writes, and unstorable receipts are counted and exposed on
+`/health`.
+
+---
+
+## Gate-to-gate protocol
+
+Two ESP32s communicate directly over ESP-NOW on a fixed channel. No router, no
+internet, no pairing. Each gate generates its own keypair on first boot and
+signs everything it says.
+
+### Announcements, one way
+
+Broadcast when a pass is accepted.
+
+```
+"OFFGATE-GOSSIP-v1"(17) || gate(16) || ent_hash(32) || seq(4)
+  || counter(4) || ts(8)                                        = 81 bytes
++ signature(64) + public key(32)                                = 177 bytes
+```
+
+The neighbour verifies and writes the spend marker to its own ledger.
+
+### Questions and approvals, two way
+
+Sent when a user presents a ticket issued for another gate. Domains are
+`OFFGATE-ASK-v1` and `OFFGATE-ACK-v1`.
+
+```
+domain(14) || from(16) || to(16) || ent_hash(32) || seq(4)
+  || nonce(8) || verdict(1)                                     = 91 bytes
++ signature(64) + public key(32)                                = 187 bytes
+```
+
+The receiving gate can verify the ticket itself. What it cannot know is whether
+that receipt has been spent, because the ledger for it lives at the issuing
+gate. So it asks. The issuing gate checks its ledger, burns the receipt, and
+only then returns a signed approval.
+
+Burning before approving is the only correct order. The reverse would leave a
+window in which the user could present the same receipt at the issuing gate
+while the approval is in flight. The cost of the correct order is that a lost
+reply burns a pass without granting entry. Double spend is the more expensive
+failure.
+
+Silence is refusal. If the issuing gate does not answer, the pass is denied. If
+it has never been heard from, the request is refused before any verification
+work is done. A network partition closes the system rather than opening it.
+
+### Asymmetry of trust
+
+| Message | Worst case if accepted | Required trust |
+|---|---|---|
+| Announcement | One additional refusal | Trust on first use |
+| Question | One pass consumed | Previously known neighbour only |
+
+An announcement cannot grant anyone a pass, so it can be accepted loosely. A
+question burns a receipt, so it is accepted only from a neighbour already in the
+peer table.
+
+### Measured on hardware
+
+| Operation | Time |
 |---|---|
-| Fazla tahsil etmek | Üst sınır kullanıcının imzasında; sözleşme reddeder |
-| Eksik beyan etmek | Parayı operatör alıyor — kapının işine gelmez |
+| Ed25519 verification | 98 ms |
+| Cross-gate approval round trip | 327-344 ms |
+| Pass at the issuing gate, end to end | 165-263 ms |
+| Pass at a neighbouring gate, end to end | 495-740 ms |
+| Replay rejection | 3 ms |
 
-Bu, sistemi turnikeden **kapalı alan harcamasına** dönüştürüyor: her kapı
-kendi fiyatını koyabilir.
+### Verified scenarios
 
-### 2 · Veriyi taşıyana ödül
+A genuine three-pass ticket issued for M307, run against both physical gates.
 
-`settle` artık **izin gerektirmiyor.** Belge kendi kendini doğruladığı için
-veriyi kimin taşıdığının önemi yok. Taşıyana, aldığımız **%5 hizmet
-bedelinin %80'i** geri ödeniyor.
+| Case | Expected | Result |
+|---|---|---|
+| Receipt 1 at M308 | M307 approves, gate opens | `remote: true`, 332 ms approval |
+| Receipt 1 at M307 | Already burned | `already_spent` |
+| Receipt 2 at M307 | Normal pass | 165 ms |
+| Receipt 2 at M308 | Known from the announcement | `already_spent`, 3 ms |
+| Receipt 3 at M308 | Remote approval, accepted | 495 ms |
+| Receipt 3 at M308 again | Local ledger stops it | `already_spent`, 3 ms |
 
-Yani senkronizasyonu operatör değil **kullanıcılar** yapıyor — kendi çıkarları
-için, bedavaya. Kapı verisi zincire kendiliğinden ulaşıyor.
+The second row is the one that matters. The same receipt was refused at its own
+gate, which proves the issuing gate burned it before approving.
 
-**Neden Stellar:** ödül talebi bir işlem gerektiriyor ve o işlem
-**$0.00001**. Ethereum'da gas ödülden büyük olurdu ve mekanizma anlamsızlaşırdı.
-Ayrıca ödül enflasyondan değil **ücretten** finanse ediliyor: token yok,
-seyreltme yok, kendi kendini finanse ediyor.
+---
 
-### 3 · Güvenli iade — ve iptalin kalkması
+## Variable fare, change, and paying users to carry data
 
-Eskiden `refund` bütün bakiyeyi veriyordu. Kullanıcı kapıdan geçip, fişler
-zincire yazılmadan önce iade alabilir ve **o geçişler bedava kalırdı.**
+Each gate has its own fare. M307 charges 100 TRY, M308 charges 80 TRY. The
+ticket's signature sets a ceiling; the gate's signature sets the amount actually
+taken.
 
-Artık açıkta kalan imzalı haklar rezerve ediliyor. Kullanıcıyı mağdur
-etmeyen şey de ödül: fişini kendisi taşıyınca rezerv çözülüyor ve para
-**aynı işlemde** serbest kalıyor.
+```
+"OFFGATE-VCHR-v1"(15) || ent_hash(32) || seq(4) || charged_try(8) || ts(8)
+  = 67 bytes, signed by the gate key
+```
 
-> **İade almanın yolu veriyi taşımaktan geçiyor.** İptal diye ayrı bir işlem
-> kalmıyor.
+The contract deducts `charged_try`, not the ceiling. The difference stays in the
+user's balance. The two signatures constrain each other: the gate cannot charge
+above the ceiling because the contract rejects it, and it has no reason to
+under-report because the operator receives the money.
 
-### Ekonomi
+`settle` requires no authorisation, because each document verifies itself. The
+carrier is paid 80 percent of the 5 percent deposit, which is 4 percent of the
+amount charged. Settlement therefore happens because users want their money
+back, not because an operator runs a job.
 
-Sistemi işletmenin gerçek marjinal maliyeti **anchor makası kadar: ~%1**
-(ölçüldü: `price` 48.785 vs `total_price` 49.029). Zincir ücretleri 1000
-kullanıcıda **5 doların altında**.
+Claiming the reward costs one Stellar transaction, under one cent. The reward is
+funded from fees, not from issuance, so there is no token and no dilution.
 
-| | Ücret | İade | Taşıyana net | Taşımayana net |
+### Refunds
+
+`refund` used to return the entire balance. A user could pass several gates and
+withdraw before the receipts reached the chain, making those passes free.
+
+Outstanding signed passes are now reserved at full fare, because an offline gate
+cannot tell the chain whether a signed pass was used. The reservation is
+released as receipts arrive:
+
+```
+outstanding = granted - used
+reserved    = outstanding * fare
+refundable  = balance - reserved
+```
+
+Carrying your own receipts dissolves your own reservation in the same
+transaction. The route to a refund runs through carrying the data, which is why
+there is no separate cancellation operation.
+
+### Economics
+
+The marginal cost of operating the system is the anchor spread, measured at
+about 1 percent (`price` 48.785078 against `total_price` 49.029003). Chain fees
+for a thousand users come to under five dollars. Hardware amortises to a few
+dollars per event.
+
+| | Fee | Rebate | Net for a carrier | Net otherwise |
 |---|---|---|---|---|
-| OffGate | %5 | %80 | **%1** | %5 |
-| POS komisyonu (TR) | %1.5–2.5 | — | — | — |
-| Festival cashless | %2–4 + bileklik | — | — | — |
+| OffGate | 5% | 80% | 1% | 5% |
+| Card terminal, Turkey | 1.5-2.5% | - | - | - |
+| Festival cashless systems | 2-4% plus per-wristband fee | - | - | - |
 
-Taşıyan için net maliyet **tam olarak anchor makasına eşit**: veriyi
-taşırsan sistem sana bedava. Marj, taşımayanlardan geliyor — ki senkronizasyon
-işini operatöre çıkaranlar onlar.
+A carrier pays exactly the anchor spread. The margin comes from users who do not
+carry, who are also the users whose receipts the operator must settle manually.
 
-### Zincirde doğrulandı — gerçek donanım, gerçek para
+### Measured on chain
 
-M307 için alınmış bilet, 80 TL'lik M308 kapısından kullanıldı
-([işlem](https://stellar.expert/explorer/testnet/tx/44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6)):
+A ticket issued for M307, used at the 80 TRY gate M308
+([transaction](https://stellar.expert/explorer/testnet/tx/44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6)).
 
-| | Sonuç |
-|---|---|
-| Operatöre geçen | **1.6398456 USDC** — 80 TL, 100 değil |
-| Kullanıcıya dönen teminat | **+0.0655938 USDC** |
-| Bakiyede kalan para üstü | **0.4099615 USDC** = 20 TL |
-| **İade edilebilir tutar** | **0 → 0.4468581 USDC** |
+| | Before | After |
+|---|---|---|
+| Operator USDC | 0.0000000 | 1.6398456 |
+| User USDC | 1.8943720 | 1.9599658 |
+| Balance held, the change | 2.0498071 | 0.4099615 |
+| Deposit held | 0.1024904 | 0.0368966 |
+| Refundable | 0.0000000 | 0.4468581 |
 
-Son satır mekanizmanın kalbi: veriyi taşımadan önce kullanıcı hiçbir şey
-çekemiyordu, taşıyınca kilit çözüldü.
+The operator received the 80 TRY equivalent, not 100. The refundable amount went
+from zero to positive, because carrying the data closed the outstanding pass.
 
 ---
 
+## Canonical message formats
+
+Four platforms produce these bytes: the contract in Rust, the operator endpoint
+in Node, the browser in TypeScript, and the gate in C++. JSON guarantees neither
+field order nor whitespace, so every signed message is fixed length.
+
+| Message | Bytes | Layout |
+|---|---|---|
+| Entitlement | 138 | `"OFFGATE-ENT-v1"(14) \|\| user(32) \|\| device_pk(32) \|\| event(16) \|\| gate(16) \|\| fare_try(8) \|\| rate(8) \|\| max_uses(4) \|\| expires(8)` |
+| Receipt | 67 | `"OFFGATE-RCPT-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| fare_try(8) \|\| ts(8)` |
+| Collection voucher | 67 | `"OFFGATE-VCHR-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| charged_try(8) \|\| ts(8)` |
+| Counter declaration | 27 | `"OFFGATE-RPRT-v1"(15) \|\| counter(4) \|\| ts(8)` |
+| Spend announcement | 81 | `"OFFGATE-GOSSIP-v1"(17) \|\| gate(16) \|\| ent_hash(32) \|\| seq(4) \|\| counter(4) \|\| ts(8)` |
+| Question, approval | 91 | `domain(14) \|\| from(16) \|\| to(16) \|\| ent_hash(32) \|\| seq(4) \|\| nonce(8) \|\| verdict(1)` |
+
+Integers are big endian. Identifiers are ASCII, zero padded to a fixed width.
+Gate identity is absent from the receipt and the voucher, because the public key
+that verifies the signature already identifies the gate, and Soroban has no
+`Symbol`-to-bytes conversion inside wasm.
+
+Agreement is enforced by tests rather than by convention. On the Rust side,
+`canonical_message_matches_javascript_vector` compares against the fixed vector
+in [`docs/test-vector.md`](docs/test-vector.md). On the ESP32 a self-test runs at
+boot and prints the result to the serial port; if it fails, the gate is not
+speaking the same language as the contract and the reason is visible
+immediately.
+
 ---
 
-## Anchor arızasına karşı yedek profil
+## Stellar integration
 
-Hackathon anchor'ı (`tr-mock-anchor.fly.dev`) iki kez ödeme yapmayı bıraktı.
-Ölçtük: **bütün SEP uçları 200 dönüyor**, sipariş açılıyor, tutar
-hesaplanıyor, anchor kendi mesajında *"TRY received; paying USDC on
-Stellar"* diyor — ve USDC hiç gelmiyor. 85 sorgu, 5.5 dakika,
-`pending_anchor`da sabit.
+### Integration partner: Stellar Wallets Kit
 
-Protokol katmanı sağlam, **ödeme işçisi ölü.** Bizim kodumuzun dokunduğu bir
-yer değil, ama demoyu tamamen durduruyor.
+[`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit),
+used in [`web/src/lib/signer.ts`](web/src/lib/signer.ts).
 
-### İki profil
-
-| | Anchor | Varlık | Sözleşme |
-|---|---|---|---|
-| **`live`** *(varsayılan)* | Gerçek anchor, SEP-1/10/38/6 | USDC | `CAYBDH2A…` |
-| `local` | Yok — kendi ihraççımız | `TUSDC` | `CB6AUNVO…` |
-
-Üst çubuktaki **Anchor / Fallback** anahtarı ikisi arasında geçiyor.
-
-**Gerçek anchor yolunun tek satırı değişmedi.** Yedek ayrı bir sözleşme ve
-ayrı bir varlık kullanıyor; açılmadığı sürece tek satırı bile çalışmıyor.
-Entegrasyon iddiası yalnızca `live` profil içindir.
-
-### Dürüstlük
-
-Yedek bir anchor **taklidi değil** ve öyle sunulmuyor: üst çubukta "Fallback"
-diye yanıyor, akış adımlarında *"skipped in fallback mode"* yazıyor. Amacı
-tek: anchor ölüyken zincirin, kapıların, para üstünün ve veri taşıma ödülünün
-çalıştığını gösterebilmek.
-
-Her iki profilde de imza zincirdeki kilide karşı doğrulanıyor (K-9) — yedekte
-güvenlik gevşetilmedi. Kapı firmware'i hiç değişmiyor; kapı hangi sözleşmenin
-arkada olduğunu zaten bilmez, yalnızca operatör imzasına bakar.
-
-## Zorunlu beyanlar
-
-### Entegrasyon ortağı — Stellar Wallets Kit
-
-[`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit) ·
-tek dosyada, ürünün çekirdek akışında:
-
-**Dosya:** [`web/src/lib/signer.ts`](web/src/lib/signer.ts)
-
-| Satır | Çağrı | Ne yapıyor |
+| Line | Call | Purpose |
 |---|---|---|
-| 14–19 | `import { StellarWalletsKit }` + Freighter / Albedo / Lobstr / Rabet / Hana modülleri | Beş cüzdanı tek arayüzle bağlar |
-| 38 | `StellarWalletsKit.init({...})` | Ağ ve modül kurulumu |
-| 53 | `StellarWalletsKit.authModal()` | Kullanıcı cüzdanını seçer |
-| 59 | `StellarWalletsKit.signTransaction(xdr, {...})` | `lock_float` / `top_up` işlemini imzalar |
+| 14-19 | `import { StellarWalletsKit }` plus the Freighter, Albedo, Lobstr, Rabet and Hana modules | Five wallets behind one interface |
+| 38 | `StellarWalletsKit.init` | Network and module configuration |
+| 53 | `StellarWalletsKit.authModal` | Wallet selection |
+| 59 | `StellarWalletsKit.signTransaction` | Signs `lock_float` and `top_up` |
 
-**Eklenti değil, çekirdek:** Kullanıcının parayı zincire kilitlemesinin tek
-yolu bu imzadır. Wallets Kit olmadan akış ilk adımda durur.
+This is not an add-on. The only way a user can lock a balance is that signature,
+so the flow stops at the first step without it.
 
-### Kullanılan Stellar Skill dosyaları — dosya yoluyla
+### Stellar Skill files used, by path
 
-| Dosya | Kaynak | Nerede kullanıldı |
+| File | Source | Where it is applied |
 |---|---|---|
-| `SKILL.md` | [`yigitcangokmen/stellar-hackathon-turkiye`](https://github.com/yigitcangokmen/stellar-hackathon-turkiye/blob/main/SKILL.md) | Mock anchor entegrasyonu: SEP-1 keşfi, SEP-10 oturumu, SEP-38 kur kilidi, SEP-6 `deposit-exchange` ve `withdraw` uçları, `simulate-bank-transfer`. Uygulaması: [`web/src/lib/anchor.ts`](web/src/lib/anchor.ts), [`scripts/01-anchor-flow.mjs`](scripts/01-anchor-flow.mjs), [`scripts/03-withdraw.mjs`](scripts/03-withdraw.mjs) |
+| `SKILL.md` | [`yigitcangokmen/stellar-hackathon-turkiye`](https://github.com/yigitcangokmen/stellar-hackathon-turkiye/blob/main/SKILL.md) | Mock anchor integration: SEP-1 discovery, SEP-10 session, SEP-38 rate lock, SEP-6 `deposit-exchange` and `withdraw`, `simulate-bank-transfer`. Implemented in [`web/src/lib/anchor.ts`](web/src/lib/anchor.ts), [`scripts/01-anchor-flow.mjs`](scripts/01-anchor-flow.mjs), [`scripts/03-withdraw.mjs`](scripts/03-withdraw.mjs) |
 
-### Dağıtılmış artefaktlar
+### Protocol usage
 
-| Alan | Değer |
+No endpoint is hardcoded. All are discovered through SEP-1 at
+`/.well-known/stellar.toml`, so switching to another anchor changes the home
+domain and nothing else.
+
+- **SEP-1**: discovery of `WEB_AUTH_ENDPOINT`, `TRANSFER_SERVER`, `ANCHOR_QUOTE_SERVER`, `SIGNING_KEY` and the currency entry.
+- **SEP-10**: authentication. The incoming challenge is checked against the anchor's `SIGNING_KEY` before signing, which prevents a man in the middle from harvesting a signature. A 401 triggers one session refresh.
+- **SEP-38**: `quote`, using `total_price` rather than `price`. The spread is part of what the user pays; computing the fare from `price` silently loses one pass per several hundred lira.
+- **SEP-6**: `deposit-exchange` with `quote_id`, not plain `deposit`, so the lira price of a pass is fixed at quote time. `destination_asset` is a bare code and `source_asset` is in SEP-38 form; using SEP-38 form for both returns 400.
+- **SEP-6**: `withdraw` for the operator payout, with a mandatory memo. The script stops before sending if the anchor returns no memo.
+
+### Soroban contract
+
+28 public functions in
+[`contracts/offgate/src/lib.rs`](contracts/offgate/src/lib.rs), 1023 lines.
+
+| Function | Purpose |
 |---|---|
-| **Contract ID** | [`CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
-| **Frontend** | https://offgate.vercel.app |
-| Etkinlik · kapılar | `FEST26` · `M307`, `M308` |
-| admin | [`GDE7PTP7…EGLG7HJ`](https://stellar.expert/explorer/testnet/account/GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ) |
-| operator | [`GDICV4EQ…23YJGITG4`](https://stellar.expert/explorer/testnet/account/GDICV4EQQZENJLJT4G6P7D3GMDC3CTMVFH3VH3X5WSXLR3723YJGITG4) |
-| USDC (klasik) | `USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
-| USDC (SAC) | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
+| `init` | One-time configuration: admin, operator, token, operator public key |
+| `register_gate` | Registers a gate and its Ed25519 public key to an event |
+| `set_gate_pk` | Rotates a gate key, for hardware replacement |
+| `lock_float` | Moves USDC in, records gate, fare, rate, device key and entitlement digest |
+| `top_up` | Adds balance to an open ticket and issues a new entitlement |
+| `next_grant` | Predicts the allowance a `top_up` would produce |
+| `quote_total` | Total payable for N passes including the deposit |
+| `settle` | Permissionless. Verifies both signatures, deducts the charged amount, pays the operator, refunds the deposit share |
+| `gate_report` | Counter declaration verified against the gate's own signature |
+| `refund` | Returns the free balance, reserving outstanding signed passes |
+| `refundable_of` | What `refund` would return right now |
+| `assign_gate`, `gate_load`, `gates_of`, `gate_pk_of`, `stats`, `declared_of`, `settled_of`, `account_of`, `uses_left`, `is_spent`, `float_of` | Reads used by the interface and the audit screen |
+
+Patterns: `require_auth` on every function that moves user funds, `extend_ttl`
+after every persistent write, `#[contractevent]` for events, and gate assignment
+validated before any token transfer so that a rejected assignment moves no
+money.
+
+---
+
+## Deployed artifacts
+
+| Item | Value |
+|---|---|
+| Contract | [`CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
+| Fallback contract | [`CB6AUNVOKLY4W23BHIR52V4F7H7SXCXW2B7CFK4KZVCQD6DOGKBMRXDI`](https://stellar.expert/explorer/testnet/contract/CB6AUNVOKLY4W23BHIR52V4F7H7SXCXW2B7CFK4KZVCQD6DOGKBMRXDI) |
+| Frontend | https://offgate.vercel.app |
+| Event | `FEST26` |
+| Admin | [`GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ`](https://stellar.expert/explorer/testnet/account/GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ) |
+| Operator | [`GDICV4EQQZENJLJT4G6P7D3GMDC3CTMVFH3VH3X5WSXLR3723YJGITG4`](https://stellar.expert/explorer/testnet/account/GDICV4EQQZENJLJT4G6P7D3GMDC3CTMVFH3VH3X5WSXLR3723YJGITG4) |
+| USDC issuer | `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
+| USDC contract (SAC) | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
 | Anchor | `tr-mock-anchor.fly.dev` |
-| Operatör açık anahtarı *(ESP32'ye gömülü, gizli değil)* | `d02af0908648d4ad33e1bcff8f6660c5b14d9529f753eefdb4aeb8effade1264` |
+| Operator public key, embedded in firmware | `d02af0908648d4ad33e1bcff8f6660c5b14d9529f753eefdb4aeb8effade1264` |
+| Gate M307, fare 100 TRY | `65823a1302e0f2451807c7e2f69ca1387a15e3de4f97ac263bc844c0d42472e5` |
+| Gate M308, fare 80 TRY | `80258f32995c7a6cbed5aac6d3f3fadd2a260418dde84f08c40cd7ab0ca3d9ab` |
 
-**İşlem hash'leri** (hepsi testnet):
+Transactions on testnet:
 
-| İşlem | Hash |
+| Operation | Hash |
 |---|---|
-| Sözleşme deploy | [`c4b51658…395b51`](https://stellar.expert/explorer/testnet/tx/c4b5165818731dfddd387bfcf8004b1581792549f0c6abd478434a5816395b51) |
-| SEP-6 deposit ödemesi | [`1f0b02e9…3cec19`](https://stellar.expert/explorer/testnet/tx/1f0b02e9bcb876874bd016358eef6b15ad4f67ff9a9294d62e38525ed83cec19) |
-| `lock_float` | [`360e2752…28c5e1`](https://stellar.expert/explorer/testnet/tx/360e2752e000a634d6d11b23928c642bf5b00fb85bd0073edcbc77d87628c5e1) |
-| `settle` | [`b895867a…3e46855`](https://stellar.expert/explorer/testnet/tx/b895867afacc364b9adf25ffc0744ef1d152bf4e27cb87ce4f495efd93e46855) |
-| `gate_report` | [`0cb88626…61a7c007`](https://stellar.expert/explorer/testnet/tx/0cb88626f200784309d14a1d1e61d95e85c1927933a48847ec0d07f961a7c007) |
-| SEP-6 withdraw ödemesi | [`4e4accc0…4453593`](https://stellar.expert/explorer/testnet/tx/4e4accc0fec4864438a53806cd3d7a3befdd5e05f41aff3a96a05c0c04453593) |
-| Trustline (user) | [`868be52e…a87900`](https://stellar.expert/explorer/testnet/tx/868be52eb7246184e6000e6b0b1ca11bc1a3357be05591ee92f16de3c9a87900) |
-| Trustline (operator) | [`5fa149dd…be36b3`](https://stellar.expert/explorer/testnet/tx/5fa149ddcc31454269552882713954763c2efa77010132915964ab1e8ebe36b3) |
+| `settle` with a gate voucher | [`44a7e31c...a588aaa6`](https://stellar.expert/explorer/testnet/tx/44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6) |
+| SEP-6 deposit payout | [`1f0b02e9...d83cec19`](https://stellar.expert/explorer/testnet/tx/1f0b02e9bcb876874bd016358eef6b15ad4f67ff9a9294d62e38525ed83cec19) |
+| SEP-6 withdraw payment | [`4e4accc0...c0445359`](https://stellar.expert/explorer/testnet/tx/4e4accc0fec4864438a53806cd3d7a3befdd5e05f41aff3a96a05c0c04453593) |
+| Trustline, user | [`868be52e...c9a87900`](https://stellar.expert/explorer/testnet/tx/868be52eb7246184e6000e6b0b1ca11bc1a3357be05591ee92f16de3c9a87900) |
+| Trustline, operator | [`5fa149dd...8ebe36b3`](https://stellar.expert/explorer/testnet/tx/5fa149ddcc31454269552882713954763c2efa77010132915964ab1e8ebe36b3) |
 
-Tam liste ve her adımın çıktısı: [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md)
+Earlier deployments and the output of every step are recorded in
+[`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md).
 
 ---
 
-## Tasarım kararları
+## Security model
 
-Hackathon boyunca çözülmesi gereken dokuz yapısal problem. Her biri demoyu
-gece yarısı patlatacak türdendi.
+### What is protected
 
-### K-1 · Freighter çevrimdışı imza atamaz → cihaz anahtarı devri
-
-Freighter uzantısı telefonda uçak modunda ham bayt imzalamaz. Akış kapıda ölürdü.
-
-**Karar:** Tarayıcı kendi Ed25519 **cihaz anahtarını** üretir, `lock_float`
-bunu zincire yazar. Fişleri cihaz anahtarı imzalar. Cüzdan yalnızca **bir kez**,
-parayı kilitlemek için kullanılır. Cüzdanın ana anahtarı telefonun çevrimdışı
-tarafına hiç inmez.
-
-### K-2 · `localStorage` origin'e bağlıdır → ön-imzalı fiş defteri
-
-Uygulama `https://offgate.vercel.app`'te, kapı sayfası `http://192.168.4.1`'de.
-**Ayrı origin.** Vercel'de saklanan bileti kapı sayfası okuyamaz.
-
-**Karar:** Kullanıcı daha çevrimiçiyken `N` fişin **tamamını** önceden imzalar.
-Bilet + N fiş tek bir base64 pakete girer. Kapıda tarayıcı hiç kripto yapmaz.
-**Seyahat çeki mantığı.**
-
-### K-3 · Demo rakamları withdraw limitinin altında kalıyordu
-
-50 TL yükleme / 5 TL bilet ile 3 geçiş = 0.31 USDC. Anchor'ın `min_offramp_usdc`
-limiti 1.0 USDC — withdraw adımı hiç çalışmazdı.
-
-**Karar:** 100 TL geçiş ücreti, banknot mantığı. 3 geçiş = 300 TL ≈ 6.18 USDC.
-Her iki yön de limitlerin üstünde.
-
-### K-4 · Kanonik mesaj — sabit bayt, JSON değil
-
-Aynı baytı **dört platform** üretmek zorunda: Soroban (Rust), Node, tarayıcı
-(TypeScript), ESP32 (C++). JSON'da alan sırası ve boşluk garanti değildir.
-
-**Karar:** Sabit uzunlukta kanonik mesaj.
-
-| Mesaj | Uzunluk | Biçim |
-|---|---|---|
-| Entitlement | 138 bayt | `"OFFGATE-ENT-v1"(14) ‖ user(32) ‖ device_pk(32) ‖ event(16) ‖ gate(16) ‖ fare(8) ‖ rate(8) ‖ max_uses(4) ‖ expires(8)` |
-| Fiş | 67 bayt | `"OFFGATE-RCPT-v1"(15) ‖ ent_hash(32) ‖ seq(4) ‖ fare(8) ‖ ts(8)` |
-| Duyuru | 81 bayt | *(yukarıda)* |
-| Soru/onay | 91 bayt | *(yukarıda)* |
-
-Test vektörü: [`docs/test-vector.md`](docs/test-vector.md). Rust tarafında
-`canonical_message_matches_javascript_vector` testi, ESP32 tarafında **açılışta
-çalışan öz-test** bunu zorluyor.
-
-### K-5 · Kapı ataması zincirde
-
-Yük dengeleme ve çifte harcamanın tek kapıya bağlanması denetlenebilir olmalı.
-Sözleşme, en boş kapıdan `GATE_LOAD_TOLERANCE = 2`'den fazla dolu bir kapıya
-kilit açılmasına izin vermez. Arayüz bu kuralı **önceden gösterir** — dolu kapı
-"şu an dolu" yazıp devre dışı kalır, kullanıcı reddedilecek isteği hiç göndermez.
-
-### K-6 · Vite + React, Next.js değil
-
-SSR/polyfill riski yok, 3 saniyede derleniyor.
-
-### K-7 · Kamera/QR yok
-
-Tarayıcılar güvenli olmayan origin'de (`http://192.168.4.1`) kamerayı açmaz.
-Bu bir mimari sınır değil, tarayıcı kısıtı — bkz. K-8.
-
-### K-8 · Taşıma katmanı değiştirilebilir
-
-> Fiş doğrulaması, taşıma biçiminden bağımsız tanımlanmış **sabit 67 baytlık**
-> kanonik mesaj üzerinde çalışır. Kapı firmware'i baytların nereden geldiğini
-> bilmez; bugün yerel wifi üzerinden HTTP POST ile geliyor, aynı baytlar
-> değişiklik gerektirmeden QR, BLE veya NFC üzerinden de taşınabilir.
-> Doğrulama, `seq` kontrolü ve `settle` yolu aynı kalır.
-
-Bu iddia boş değil: aynı `process_pay` fonksiyonu **hem HTTP hem seri port**
-üzerinden çağrılıyor. Test yolu ile saha yolu ayrışamaz.
-
-### K-9 · Geçiş hakkı istemciden alınamaz
-
-**Bulunan açık:** İlk kurguda operatör, istemcinin gönderdiği `max_uses`'i
-sorgulamadan imzalıyordu. Kapı bakiyeyi hiç görmez — yalnızca imzaya bakar.
-Kullanıcı tarayıcıda `max_uses: 999` gönderse **999 geçiş hakkı kazanırdı.**
-
-**Düzeltme:** Sıra tersine çevrildi. Önce `lock_float` (zincir), sonra imza.
-Operatör entitlement'ı **zincirdeki kilitten yeniden kurar** ve ürettiği özet
-zincirdeki `ent_hash` ile birebir tutmuyorsa imzayı **hiç vermez** (HTTP 409).
-
-Üretimde doğrulandı:
-```
-POST /api/sign-entitlement  {"user":"GCWN…","expires":…,"maxUses":999}
-→ {"max_uses": 6}          ← istemcinin sayısı yok sayıldı
-```
-
----
-
-## Güvenlik modeli — dürüst liste
-
-### Korunan
-
-| Saldırı | Nasıl durduruluyor |
+| Attack | Mechanism |
 |---|---|
-| Sahte bilet üretme | Operatör imzası; gizli anahtar sunucuda, ESP32'de yok |
-| Fişi kopyalayıp tekrar kullanma | Kapının NVS defteri — 3 ms'de ret |
-| İki kapıdan aynı fişle geçme | Kapılar arası imzalı soru/onay; **önce yak sonra onayla** |
-| Geçiş hakkını şişirme | K-9 — operatör zincirden doğrular |
-| Ücreti oynatma | `fare_try` imzalı mesajın içinde |
-| Sıra numarasını değiştirme | `seq` imzalı mesajın içinde |
-| Başka kapının biletini kullanma | Bilet `gate`'e bağlı; yabancı kapı izin almak zorunda |
-| Operatörün hasılatı eksik beyan etmesi | `gate_report` kapının **kendi** imzasıyla; operatör sayıyı yazamaz |
-| Kapıdan geçip parayı geri çekmek | Açık imzalı haklar `refund`ta rezerve edilir |
-| Kapının fazla tahsil etmesi | Üst sınır kullanıcının imzasında |
-| Eski beyanı tekrar oynatmak | Sayaç yalnızca ileri gider |
-| Cihazı söküp anahtar çalma | ESP32'de gizli anahtar yok — yalnızca operatörün *açık* anahtarı |
-| Sahte komşu kapı | Soru yalnızca tanınan komşudan, Ed25519 imzalı, nonce'lu |
+| Forging a ticket | Operator signature; the secret key is server side and absent from the gate |
+| Replaying a receipt | The gate's NVS ledger, rejected in 3 ms |
+| Using one receipt at two gates | Signed cross-gate question and approval; the receipt is burned before the approval is sent |
+| Inflating the allowance | The operator rebuilds the entitlement from the on-chain lock and refuses to sign if the digest does not match |
+| Tampering with the fare | `fare_try` is inside the signed message |
+| Editing the sequence number | `seq` is inside the signed message |
+| A gate overcharging | The ceiling is in the user's signature and the contract enforces it |
+| A gate under-reporting | The operator receives the amount, so under-reporting costs the operator's own device |
+| Under-reporting revenue | `gate_report` carries the gate's own signature; the operator cannot write the number |
+| Replaying an old declaration | The counter only moves forward |
+| Withdrawing after passing offline | Outstanding signed passes are reserved during `refund` |
+| Opening the device to extract keys | The ESP32 holds no secret key, only the operator's public key |
+| Impersonating a neighbouring gate | Questions are accepted only from known neighbours, Ed25519 signed, with a nonce |
 
-### Korunmayan — bilinen sınırlar
+### What is not protected
 
-**Paket hamiline yazılıdır.** Paketi kopyalayan geçiş hakkını da kopyalar. Fiş
-tekrarı engelli ama *kimin* kullandığı doğrulanamıyor. Sebep mimari: cihaz
-anahtarı `offgate.vercel.app` origin'inde, kapı sayfası `192.168.4.1`'de —
-tarayıcı aradaki geçişe izin vermiyor. PIN denendi, ~30 bit entropi ile
-çevrimdışı kırılabilir olduğu için reddedildi. **Çözüm:** native mobil
-uygulama (K-8 ile firmware değişikliği gerektirmez).
+**The bundle is a bearer instrument.** Whoever copies it can use it. Replay is
+prevented, but possession is not tied to a person. The cause is architectural:
+the device key lives on the `offgate.vercel.app` origin and the gate page on
+`192.168.4.1`, and the browser does not allow data to cross between them. A PIN
+was considered and rejected; at roughly 30 bits of entropy it is breakable
+offline against a stolen bundle. The fix is a native mobile application, which
+requires no firmware change because verification is transport independent.
 
-**Komşu kapı biletin geçerliliğini tek başına doğrular ama harcanmışlığını
-doğrulayamaz.** Ağ bölünürse kapı fail-closed davranır (geçirmez), yani
-güvenlik değil erişilebilirlik kaybı olur. **Çözüm:** kapıların birden fazla
-komşuya bağlanması; protokol dört komşuya kadar hazır.
+**The turnstile cannot enforce `expires`.** It has no clock. Expiry is checked
+only at the signing endpoint, which caps tickets at 48 hours. The fix is an RTC
+module or time synchronisation from the staff device.
 
-**Turnike `expires` alanını zorlayamıyor.** Saati yok. Süre kontrolü şu an
-yalnızca imza ucunda (48 saat üst sınır). **Çözüm:** RTC modülü veya görevli
-telefonundan saat senkronizasyonu.
+**A neighbour's key is pinned on first hearing.** Adequate for a closed network.
+In production, gate public keys should be read from the contract, which already
+stores them through `register_gate` and can rotate them through `set_gate_pk`.
 
-**Komşu anahtarı ilk duyuşta sabitleniyor** (trust-on-first-use). Kapalı demo
-ağı için yeterli. **Çözüm:** kapı açık anahtarlarını `register_gate` ile
-sözleşmeye yazıp oradan dağıtmak.
+**The receipt ledger is bounded by NVS, which is 20 KB.** When it fills,
+receipts cannot be stored and passes are refused rather than silently lost. The
+count is exposed on `/health`. An attempt to enlarge the partition put the
+`esp32dev` bootloader into a reset loop and was reverted.
 
-**Fiş defteri NVS'te ve NVS 20 KB.** Dolduğunda fiş saklanamaz. Eskiden bu
-**sessizce** oluyordu — geçiş veriliyor, o geçişin parası zincire hiç
-yazılamıyordu. Artık: yazılamıyorsa **geçiş de verilmiyor** (`ledger_full`) ve
-kayıp `/health` ucunda `lost` alanında görünüyor.
+**A network partition denies cross-gate passes.** The system fails closed, so
+the loss is availability rather than safety. Connecting each gate to more than
+one neighbour reduces the exposure; the protocol supports four.
 
 ---
 
-## Test kanıtı
+## Tests and measurements
 
-### Sözleşme — 46/46 geçiyor
+### Contract
 
 ```sh
 cargo test -p offgate
 ```
 
-Gerçek Ed25519 imzalarıyla (`ed25519-dalek`, yalnızca dev-dependency). Öne çıkanlar:
+46 tests, all passing, using real Ed25519 signatures through `ed25519-dalek` as
+a dev dependency. Test source is 1106 lines.
 
-| Test | Ne kanıtlıyor |
+| Test | Property |
 |---|---|
-| `lock_float_requires_user_auth` | İmzasız çağrı panikler |
-| `lock_without_gates_fails_and_moves_no_money` | Başarısız atamada para hareket etmez |
-| `settle_is_idempotent_for_repeated_batches` | Mükerrer gönderim zararsız |
-| `settle_rejects_replayed_sequence_number` | Tekrar saldırısı engelli |
-| `settle_rejects_forged_signature` | Sahte imza batch'i durduruyor |
-| `settle_rejects_tampered_amount` | Ücret oynatma imzada düşüyor |
-| `settle_skips_receipts_from_another_gate` | Fiş tek kapıya bağlı |
-| `settle_releases_gate_slot_when_ticket_is_used_up` | Tükenen bilet kapı yerini bırakır |
-| `top_up_never_grants_more_passes_than_the_money_covers` | Ek yükleme hak şişiremez |
-| `refund_keeps_spent_receipts_unusable_after_relock` | İade sonrası eski fişler ölü |
-| `stats_reveal_underreporting_gate` | Eksik beyan denetimde görünüyor |
-| `canonical_message_matches_javascript_vector` | Rust ve JS bayt-bayt aynı |
-| `gate_belongs_to_exactly_one_event` | Kapı sayaçları tek anlamlı |
+| `lock_float_requires_user_auth` | An unsigned call panics |
+| `lock_without_gates_fails_and_moves_no_money` | A rejected gate assignment moves no funds |
+| `settle_is_idempotent_for_repeated_batches` | Re-submission is harmless |
+| `settle_rejects_replayed_sequence_number` | Replay is blocked |
+| `settle_rejects_forged_signature` | A forged signature aborts the batch |
+| `settle_rejects_tampered_amount` | Fare tampering fails verification |
+| `settle_charges_only_what_the_gate_signed` | Change remains in the balance |
+| `settle_rejects_a_charge_above_the_signed_fare` | A gate cannot overcharge |
+| `settle_pays_back_the_service_fee_to_whoever_carries_the_data` | The rebate reaches the wallet |
+| `rebate_never_exceeds_the_fee_that_was_collected` | The rebate is bounded |
+| `anyone_can_carry_the_data_on_chain` | `settle` needs no authorisation |
+| `settle_accepts_a_pass_taken_at_a_neighbouring_gate` | Cross-gate passes settle |
+| `settle_rejects_a_voucher_signed_by_a_different_gate` | A voucher is bound to its gate |
+| `refund_cannot_take_back_money_for_passes_used_offline` | The refund hole is closed |
+| `settling_receipts_unlocks_what_refund_had_reserved` | Carrying data releases the reservation |
+| `gate_report_requires_the_gate_signature` | The operator cannot write the declaration |
+| `gate_report_ignores_a_replayed_older_counter` | The counter does not move backwards |
+| `gate_key_can_be_rotated` | A replaced turnstile does not kill the gate |
+| `stats_reveal_underreporting_gate` | Under-reporting is visible in the audit |
+| `canonical_message_matches_javascript_vector` | Rust and JavaScript agree byte for byte |
+| `gate_belongs_to_exactly_one_event` | Gate counters are unambiguous |
 
-### Donanım — açılışta öz-test
+### Firmware
 
-Her ESP32 açılışta kanonik formatı test vektörüne karşı doğrular:
+Self-test at boot, against the same vector:
 
 ```
-OffGate — kanonik format öz-testi
-  ✓ fiş kanonik baytları (67) doğru
-  ✓ Ed25519 doğrulaması geçti (98 ms)
-  ✓ bozuk imza reddedildi
-  ✓ entitlement kanonik baytları (138) doğru
-  ✓ SHA-256 ent_hash doğru
-OffGate kapı hazır
-  kapı     : M307
-  internet : YOK — doğrulama tamamen yerel
-  öz-test  : GEÇTİ
-  kimlik   : e93599c7ca65ed301bea1872a41c869d8e01add6c53eae3e6609cf6d6dd0ea33
-  komşuluk : açık (ESP-NOW, kanal 1)
+OffGate - canonical format self-test
+  receipt canonical bytes (67) correct
+  Ed25519 verification passed (98 ms)
+  corrupted signature rejected
+  entitlement canonical bytes (138) correct
+  SHA-256 ent_hash correct
+OffGate gate ready
+  gate      : M307
+  fare      : 10000 kurus (100.00 TRY)
+  internet  : none, verification is entirely local
+  self-test : passed
+  identity  : 65823a1302e0f2451807c7e2f69ca1387a15e3de4f97ac263bc844c0d42472e5
+  neighbours: on (ESP-NOW, channel 1)
 ```
 
-Bu test geçmezse kapı, sözleşme ve web uygulamasıyla **aynı dili konuşmuyor**
-demektir ve sebebi hemen görülür.
-
-| Ölçüm | Değer |
+| Measurement | Value |
 |---|---|
-| RAM | %15.1 (49 KB / 320 KB) |
-| Flash | %63.8 (836 KB / 1.3 MB) |
-| Donanım maliyeti | ~5 USD / kapı |
+| RAM | 15.1 percent, 49.6 KB of 320 KB |
+| Flash | 64.1 percent, 840 KB of 1.31 MB |
+| Firmware source | 1635 lines of C++ across five files |
+| Hardware cost | about 5 USD per gate |
 
 ---
 
-## Kurulum — sıfırdan
+## Build and run
 
-### Gereksinimler
+Requirements: Rust 1.84 or newer with the `wasm32v1-none` target, the Stellar
+CLI, Node 20 or newer, and PlatformIO for the hardware.
 
-- Rust 1.84+ · `rustup target add wasm32v1-none`
-- [Stellar CLI](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup)
-- Node 20+
-- PlatformIO *(yalnızca donanım için)*
-
-### 1 · Sözleşme
+### Contract
 
 ```sh
 git clone https://github.com/hyrlhc/offgate && cd offgate
-cp .env.example .env          # sonra kendi anahtarlarını doldur
+cp .env.example .env
 
-cargo test -p offgate         # 46 test
-stellar contract build        # -> target/wasm32v1-none/release/offgate.wasm
+cargo test -p offgate
+stellar contract build
 ```
 
-Kendi dağıtımını yapmak istersen:
+To deploy your own instance:
 
 ```sh
-node scripts/00-setup-accounts.mjs    # admin/operator/user üret + Friendbot + trustline
+node scripts/00-setup-accounts.mjs
 stellar contract deploy --wasm target/wasm32v1-none/release/offgate.wasm \
   --source-account admin --network testnet
-# Çıkan ID'yi web/shared/deployment.js içindeki contractId alanına yaz — TEK yer orası.
+stellar contract invoke --id <ID> --source-account admin --network testnet -- init \
+  --admin <ADMIN> --operator <OPERATOR> --usdc_token <SAC> --operator_pk <HEX>
+stellar contract invoke --id <ID> --source-account admin --network testnet -- register_gate \
+  --event FEST26 --gate M307 --gate_pk <GATE_PUBLIC_KEY_FROM_SERIAL>
 ```
 
-### 2 · Web uygulaması
+The contract id belongs in `contractId` in
+[`web/shared/deployment.js`](web/shared/deployment.js), which is the only place
+it appears.
+
+### Web application
 
 ```sh
 cd web && npm install
-npm run dev                   # OPERATOR_SECRET'i kök .env'den okur
+npm run dev
 ```
 
-> **`OPERATOR_SECRET` asla `VITE_` önekli olmamalı.** `VITE_` önekli her
-> değişken tarayıcıya iner. Operatörün gizli anahtarı yalnızca sunucu
-> tarafında (Vercel Secret / kök `.env`) durur.
+`OPERATOR_SECRET` must never carry the `VITE_` prefix. Every `VITE_` variable is
+shipped to the browser. The operator key belongs in the root `.env` during
+development and in a Vercel secret in production.
 
-### 3 · Kapı donanımı
+### Gate firmware
 
 ```sh
 cd firmware/offgate-gate
-pio run -e gate1 -t upload    # Kapı 1 -> M307
-pio run -e gate2 -t upload    # Kapı 2 -> M308
-pio device monitor            # öz-test + kimlik + komşuluk durumu
+pio run -e gate1 -t upload
+pio run -e gate2 -t upload
+pio device monitor
 ```
 
-Firmware'e gömülü operatör açık anahtarı [`src/main.cpp`](firmware/offgate-gate/src/main.cpp)
-içindedir ve `.env` dosyasındaki `OPERATOR_PK_HEX` ile **aynı olmak zorundadır**.
+The gate identity printed at boot must equal `gate_pk_of(gate)` on chain. If a
+gate is reflashed onto different hardware, rotate the key with `set_gate_pk`.
 
-### 4 · Operatör işleri
+The operator public key embedded in
+[`firmware/offgate-gate/src/main.cpp`](firmware/offgate-gate/src/main.cpp) must
+equal `OPERATOR_PK_HEX` in `.env`.
+
+### Operator tasks
 
 ```sh
-node scripts/status.mjs                       # anchor + zincir + denetim panosu
-node scripts/02-settle.mjs --from receipts.json   # fişleri zincire yaz
-node scripts/03-withdraw.mjs                  # hasılatı TL olarak çek
+node scripts/status.mjs
+node scripts/02-settle.mjs --from receipts.json
+node scripts/03-withdraw.mjs
 ```
 
-### Kapı konsolu
+### Gate serial console
 
-Kapı seri porttan da sürülebilir — **aynı** `process_pay` fonksiyonu, aynı kripto:
-
-```
-PAY {json}   ödeme paketini işler (HTTP /pay ile aynı fonksiyon)
-PEERS        kimlik ve tanınan komşular
-RESET        sayacı ve harcanmış fişleri sıfırlar
-```
-
----
-
-## Repo yerleşimi
+The gate accepts the same payload over the serial port as over HTTP, through the
+same function, so the test path cannot diverge from the field path.
 
 ```
-contracts/offgate/src/lib.rs   Soroban sözleşmesi — lock_float, top_up, settle, refund, denetim
-contracts/offgate/src/test.rs  46 host testi, gerçek Ed25519 imzalarıyla
-
-web/shared/deployment.js       Dağıtım sabitlerinin TEK kaynağı
-web/src/lib/signer.ts          Stellar Wallets Kit — entegrasyon ortağı
-web/src/lib/anchor.ts          SEP-1 / SEP-10 / SEP-38 / SEP-6
-web/src/lib/contract.ts        Soroban çağrıları
-web/src/lib/receipts.ts        Kanonik biçim + fiş defteri + cihaz anahtarı
-web/src/lib/flow.ts            Tek düğmenin arkasındaki zincir
-web/src/TopUpFlow.tsx          Banknot arayüzü + kapı seçici
-web/src/Audit.tsx              Denetim ekranı — beyan vs zincir
-web/api/sign-entitlement.js    Operatör imza ucu (sunucu tarafı, K-9)
-
-firmware/offgate-gate/src/offgate.h   Kanonik biçim + Ed25519 doğrulama
-firmware/offgate-gate/src/mesh.h      ESP-NOW — duyuru + soru/onay
-firmware/offgate-gate/src/main.cpp    Kapı mantığı, defter, captive portal
-firmware/offgate-gate/src/selftest.h  Açılışta çalışan format kanıtı
-
-scripts/                       Operatör ve kurulum işleri (Node)
-docs/                          Mimari, akış anlatımı, artefaktlar, test vektörü
+PAY {json}   process a payment bundle
+PEERS        identity and known neighbours
+RESET        clear the counter and the spent-receipt ledger
 ```
 
 ---
 
-## Dokümanlar
+## Fallback profile
 
-| Dosya | İçerik |
+The hackathon anchor stopped paying out twice during development. Measured
+behaviour: every SEP endpoint returns 200, the order opens, the amount is
+computed, the anchor reports `TRY received; paying USDC on Stellar`, and no USDC
+arrives. 85 status polls over 5.5 minutes with the transaction fixed at
+`pending_anchor`. The protocol layer is healthy and the payout worker is not.
+
+The application therefore carries two profiles, switched from the top bar.
+
+| | Anchor | Asset | Contract |
+|---|---|---|---|
+| `live`, default | Real anchor, SEP-1, SEP-10, SEP-38, SEP-6 | USDC | `CAYBDH2A...` |
+| `local` | None, our own issuer | `TUSDC` | `CB6AUNVO...` |
+
+No line of the live anchor path changed. The fallback uses a separate contract
+and a separate asset, and none of its code runs unless it is switched on. It is
+not an anchor impersonation and is not presented as one: the top bar reads
+`Fallback` and the flow steps read `skipped in fallback mode`. The integration
+claim in this document applies to the `live` profile.
+
+In both profiles the entitlement signature is verified against the on-chain
+lock. The gate firmware is unchanged and unaware of which contract is behind it;
+it only checks the operator signature.
+
+---
+
+## Repository layout
+
+```
+contracts/offgate/src/lib.rs    Soroban contract, 1023 lines
+contracts/offgate/src/test.rs   46 host tests with real Ed25519 signatures
+
+web/shared/deployment.js        Deployment constants, both profiles
+web/src/lib/signer.ts           Stellar Wallets Kit, the integration partner
+web/src/lib/anchor.ts           SEP-1, SEP-10, SEP-38, SEP-6
+web/src/lib/contract.ts         Soroban invocations and ScVal encoding
+web/src/lib/receipts.ts         Canonical formats, receipt book, device key
+web/src/lib/carry.ts            Decoding and submitting gate data
+web/src/lib/flow.ts             The sequence behind the single button
+web/src/lib/i18n.ts             English and Turkish
+web/src/TopUpFlow.tsx           Purchase interface
+web/src/Carry.tsx               Carry gate data, collect the refund
+web/src/Audit.tsx               Declared against on chain
+web/api/sign-entitlement.js     Operator signing endpoint, server side
+web/api/fallback-payout.js      Fallback profile payout, server side
+
+firmware/offgate-gate/src/offgate.h    Canonical formats, Ed25519 verification
+firmware/offgate-gate/src/mesh.h       ESP-NOW, gate identity, vouchers
+firmware/offgate-gate/src/main.cpp     Gate logic, ledger, captive portal
+firmware/offgate-gate/src/selftest.h   Boot-time format proof
+
+scripts/                        Setup and operator tasks
+docs/                           Architecture, walkthrough, artifacts, test vector
+```
+
+## Documentation
+
+| File | Contents |
 |---|---|
-| [`docs/BASIT-AKIS.md`](docs/BASIT-AKIS.md) | **Sistemin uçtan uca sade anlatımı — buradan başla** |
-| [`docs/OFFGATE-BUILD-PLAN.md`](docs/OFFGATE-BUILD-PLAN.md) | Mimari, teknik sözlük, anchor referansı |
-| [`docs/OFFGATE-PACKAGES.md`](docs/OFFGATE-PACKAGES.md) | Paket paket geliştirme planı ve karar kayıtları |
-| [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) | Contract ID, hesaplar, her adımın işlem hash'i |
-| [`docs/test-vector.md`](docs/test-vector.md) | Kanonik imza biçimi, platformlar arası test vektörü |
+| [`docs/BASIT-AKIS.md`](docs/BASIT-AKIS.md) | End-to-end walkthrough in Turkish, the best starting point |
+| [`docs/OFFGATE-BUILD-PLAN.md`](docs/OFFGATE-BUILD-PLAN.md) | Architecture, glossary, anchor reference |
+| [`docs/OFFGATE-PACKAGES.md`](docs/OFFGATE-PACKAGES.md) | Build plan and decision records |
+| [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) | Every deployment, account and transaction |
+| [`docs/test-vector.md`](docs/test-vector.md) | Cross-platform signature test vector |
 
 ---
 
-## Yol haritası
+## Roadmap
 
-**Yakın vade**
-- Native mobil uygulama — paketin hamiline yazılı olmasını çözer, BLE/NFC taşıma açar (K-8)
-- `refund` sıkılaştırması — açıkta kalan imzalı hakları iade edilebilir tutardan düşmek
-- Kapı açık anahtarlarını `register_gate` ile zincire yazmak — TOFU'yu kaldırır
-- Turnikeye RTC — `expires` kapıda zorlanabilir hale gelir
+Near term:
 
-**Orta vade**
-- Kullanıcıların kapı verisini zincire taşıyıp ödül kazanması — kapılar zaten imzalı rapor üretebiliyor
-- Gerçek anchor entegrasyonu (mock yerine)
-- Çok kapılı mesh — şu an iki kapı, protokol dört komşuya kadar hazır
+- Native mobile application, which removes the bearer-instrument property and opens BLE and NFC transport without firmware changes
+- Gate public keys distributed from the contract rather than pinned on first hearing
+- Real-time clock at the gate so that `expires` becomes enforceable locally
+- More than two neighbours per gate
 
-**Sonraki adım:** Stellar Community Fund (SCF) başvurusu. Ürünün gerçek dünya
-karşılığı net: Türkiye'de festival ve stadyum operatörleri, kapı başına donanım
-maliyeti ve ağ bağımlılığı yüzünden turnikeli ödemeye geçemiyor.
+Medium term:
+
+- Production anchor in place of the mock
+- Users carrying gate declarations for a reward, extending the mechanism that already exists for receipts
+- Compact binary receipt storage to raise the ledger ceiling
+
+Next step: an application to the Stellar Community Fund. The case is specific.
+Festival and stadium operators in Turkey do not move to turnstile payment
+because of per-gate hardware cost and network dependency, and both are what this
+design removes.
 
 ---
 
-## Dürüst notlar
+## Notes
 
-- **Testnet.** Gerçek para hareketi yoktur.
-- **`simulate-bank-transfer` yalnızca mock anchor'a özgüdür.** Gerçek hayatta
-  kullanıcı EFT açıklamasına referans kodunu yazar, anchor ödemeyi Stellar
-  hesabıyla eşleştirir. Akışın geri kalanı — SEP-1 keşfi, SEP-10 oturumu,
-  SEP-38 kur kilidi, SEP-6 `deposit-exchange` ve `withdraw` — **standart ve
-  gerçektir**, anchor değiştirildiğinde tek değişen şey home domain'dir.
-- **Hiçbir endpoint kodda sabit değildir.** Hepsi SEP-1
-  (`/.well-known/stellar.toml`) üzerinden keşfedilir.
-- **Mock veri yoktur.** Buradaki her ölçüm, her hash ve her ekran çıktısı
-  çalışan sistemden alınmıştır.
+- Testnet. No real funds move.
+- `simulate-bank-transfer` exists only on the mock anchor. In production the user writes the reference code in the transfer description and the anchor matches the payment to a Stellar account. The rest of the flow is standard.
+- No endpoint is hardcoded; all are discovered through SEP-1.
+- Every measurement, hash and console output in this document was taken from the running system.
