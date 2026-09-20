@@ -118,11 +118,10 @@ offline side of the phone.
 
 ## How the signatures chain together
 
-This is the part a reviewer will want to check for a logical gap, so it is
-written out step by step. One clarification first, because it is a common
-assumption: a Soroban contract cannot sign anything. It holds no private key.
-What the contract does is *commit* a digest, and the operator will only sign a
-document that matches what the chain already committed.
+A Soroban contract cannot sign anything. It holds no private key. What the
+contract does is *commit* a digest; the operator signs, and only signs a
+document that matches what the chain already committed. The steps below trace
+one ticket from purchase to settlement and name the key involved at each point.
 
 ### Step 1. The user commits the ticket digest on chain
 
@@ -205,43 +204,38 @@ through `register_gate`.
 
 Only then does the money move.
 
-### What the gate can and cannot know offline
+### How the gate knows the data came from the chain
 
-This distinction matters, and glossing over it would be the real logical gap.
+It does not, directly. The gate never contacts the chain, so it has no ledger
+state and no proof it could check. Verifying the operator signature tells it
+exactly one thing: the operator vouched for these bytes.
 
-The gate never contacts the chain. When it verifies the operator signature, it
-learns exactly one thing: *the operator vouched for these bytes*. It does not
-learn, and cannot learn offline, that the chain ever committed them. There is no
-ledger proof it could check without synchronising a chain it has no connection
-to.
+What carries the chain guarantee is the digest itself. The same 32-byte value
+appears in three places:
 
-The link to the chain is enforced at two other points instead.
+- On chain, written by `lock_float` under the user's own wallet signature
+- As the hash of the 138 bytes the operator signed
+- Inside every receipt, covered by the device key signature
 
-**By policy, at signing time.** The operator endpoint rebuilds the entitlement
-from on-chain values and refuses to sign anything that does not match the
-committed digest. This is a rule the operator follows, not something the gate
-verifies.
+The operator issues a signature only when the second matches the first. The
+contract accepts a receipt only when the third matches the first. The gate sits
+between them and checks the second against the third.
 
-**By the contract, at settlement.** `settle` reads `acct.ent_hash` from the
-chain and refuses any receipt that does not match. A ticket with no on-chain
-lock behind it can never be settled.
+The consequence is what makes this safe. A ticket that was never locked on chain
+can still be signed by the operator and will still open a gate, but the receipts
+it produces can never be settled, because `settle` reads `acct.ent_hash` from
+the chain and finds nothing to match. The gate can be fooled; the money cannot
+move.
 
-The consequence is the part worth stating plainly. If the operator key were
-misused to sign an entitlement with no locked balance behind it, gates would
-open and the operator would receive nothing at settlement, because there would
-be no account to deduct from. The only party capable of that forgery is the one
-who loses money by committing it.
+The only party able to produce such a ticket is the operator, who would be
+opening gates and collecting nothing.
 
-An auditor can close the loop from outside. `operator_pk()` publishes the
+An auditor can check the whole path from outside. `operator_pk()` publishes the
 operator public key on chain, so the key compiled into a gate can be compared
 against what the contract declares. `account_of(user)` returns the committed
-digest, so any issued ticket can be recomputed and checked.
+digest, so any issued ticket can be recomputed and matched.
 
-So the honest summary is this. Offline, the gate trusts one signature. On chain,
-that trust is bounded: the operator can cause a gate to open without payment,
-but cannot cause itself to be paid, and cannot do so undetectably.
-
-### Where a reviewer would look for a gap
+### What each party can and cannot do
 
 | Question | Answer |
 |---|---|

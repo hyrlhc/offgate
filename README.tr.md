@@ -117,11 +117,11 @@ yazar ve fiş imzalama yetkisini ona devreder. Cüzdanın kendi anahtarı telefo
 
 ## İmzalar birbirine nasıl bağlanıyor
 
-Bir değerlendiricinin mantık hatası arayacağı yer burasıdır, bu yüzden adım adım
-yazıldı. Önce sık yapılan bir varsayımı düzeltmek gerekiyor: bir Soroban
-sözleşmesi hiçbir şey imzalayamaz. İçinde gizli anahtar yoktur. Sözleşmenin
-yaptığı şey bir özeti *taahhüt etmektir*; operatör de yalnızca zincirin zaten
-taahhüt ettiği belgeyi imzalar.
+Bir Soroban sözleşmesi hiçbir şey imzalayamaz. İçinde gizli anahtar yoktur.
+Sözleşmenin yaptığı şey bir özeti *taahhüt etmektir*; imzayı operatör atar ve
+yalnızca zincirin zaten taahhüt ettiği belgeyi imzalar. Aşağıdaki adımlar bir
+bileti satın alınmasından senkronizasyonuna kadar izliyor ve her noktada hangi
+anahtarın devrede olduğunu söylüyor.
 
 ### Adım 1. Kullanıcı bilet özetini zincire taahhüt eder
 
@@ -203,40 +203,39 @@ kayıtlıdır.
 
 Ancak bunların hepsi geçerse para hareket eder.
 
-### Kapının çevrimdışı bilebildiği ve bilemediği
+### Kapı, verinin zincirden geldiğini nasıl anlıyor
 
-Bu ayrım önemli; üstünü örtmek asıl mantık açığı olurdu.
+Doğrudan anlamıyor. Kapı zincirle hiç temas etmez; elinde defter durumu da
+kontrol edebileceği bir kanıt da yoktur. Operatör imzasını doğrulamak ona tek
+bir şey söyler: operatör bu baytlara kefil oldu.
 
-Kapı zincirle hiç temas etmez. Operatör imzasını doğruladığında öğrendiği tek
-şey şudur: *operatör bu baytlara kefil oldu*. Zincirin o baytları taahhüt edip
-etmediğini öğrenmez, çevrimdışı öğrenemez de. Bağlantısı olmayan bir zinciri
-senkronize etmeden kontrol edebileceği bir defter kanıtı yoktur.
+Zincir güvencesini taşıyan şey özetin kendisidir. Aynı 32 baytlık değer üç yerde
+birden bulunur:
 
-Zincire bağ bunun yerine başka iki noktada zorlanır.
+- Zincirde, `lock_float` tarafından kullanıcının kendi cüzdan imzasıyla yazılmış
+- Operatörün imzaladığı 138 baytın hash'i olarak
+- Her fişin içinde, cihaz anahtarı imzasının kapsamında
 
-**İmza anında, kural olarak.** Operatör ucu bileti zincirdeki değerlerden
-yeniden kurar ve taahhüt edilen özetle eşleşmeyen hiçbir şeyi imzalamaz. Bu,
-operatörün uyduğu bir kuraldır; kapının doğruladığı bir şey değildir.
+Operatör imzayı yalnızca ikincisi birinciyle eşleştiğinde verir. Sözleşme fişi
+yalnızca üçüncüsü birinciyle eşleştiğinde kabul eder. Kapı ikisinin arasında
+durur ve ikinciyi üçüncüye karşı kontrol eder.
 
-**Senkronizasyonda, sözleşme tarafından.** `settle`, zincirden `acct.ent_hash`
-değerini okur ve eşleşmeyen hiçbir fişi kabul etmez. Arkasında zincirde kilit
-olmayan bir bilet hiçbir zaman settle edilemez.
+Bunu güvenli kılan sonuç şudur. Zincirde hiç kilitlenmemiş bir bilet yine de
+operatör tarafından imzalanabilir ve yine de bir kapıyı açar; ama ürettiği
+fişler hiçbir zaman settle edilemez, çünkü `settle` zincirden `acct.ent_hash`
+değerini okur ve eşleşecek bir şey bulamaz. Kapı kandırılabilir; para hareket
+edemez.
 
-Asıl açıkça söylenmesi gereken sonuç şu: operatör anahtarı, arkasında kilitli
-bakiye olmayan bir bileti imzalamak için kötüye kullanılsaydı, kapılar açılır ama
-operatör senkronizasyonda hiçbir şey alamazdı, çünkü düşülecek bir hesap
-olmazdı. Bu sahteciliği yapabilecek tek taraf, yaptığında para kaybeden taraftır.
+Böyle bir bileti üretebilecek tek taraf operatördür ve bunu yaptığında kapıları
+açıp karşılığında hiçbir şey almamış olur.
 
-Bir denetçi döngüyü dışarıdan kapatabilir. `operator_pk()` operatörün açık
-anahtarını zincirde yayımlar; böylece bir kapıya derlenmiş anahtar, sözleşmenin
-beyan ettiğiyle karşılaştırılabilir. `account_of(user)` taahhüt edilen özeti
-döndürür; böylece düzenlenmiş her bilet yeniden hesaplanıp kontrol edilebilir.
+Bir denetçi bütün yolu dışarıdan kontrol edebilir. `operator_pk()` operatörün
+açık anahtarını zincirde yayımlar; böylece bir kapıya derlenmiş anahtar,
+sözleşmenin beyan ettiğiyle karşılaştırılabilir. `account_of(user)` taahhüt
+edilen özeti döndürür; böylece düzenlenmiş her bilet yeniden hesaplanıp
+eşleştirilebilir.
 
-Dürüst özet şudur: çevrimdışında kapı tek bir imzaya güvenir. Zincirde bu güvenin
-sınırı vardır — operatör bir kapıyı ödemesiz açtırabilir, ama kendisine ödeme
-yaptıramaz ve bunu fark edilmeden yapamaz.
-
-### Bir değerlendiricinin açık arayacağı yerler
+### Hangi taraf ne yapabilir, ne yapamaz
 
 | Soru | Cevap |
 |---|---|
