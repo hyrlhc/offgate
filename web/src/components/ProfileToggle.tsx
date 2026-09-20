@@ -1,4 +1,5 @@
 import { CONFIG, setProfile } from '../config.ts';
+import { t, useLang } from '../lib/i18n.ts';
 
 /**
  * Anchor / Yedek anahtari.
@@ -11,20 +12,17 @@ import { CONFIG, setProfile } from '../config.ts';
  * gormeli. Sahte bir seyi gercekmis gibi gostermiyoruz.
  */
 export default function ProfileToggle() {
+  useLang();
   const local = CONFIG.profile === 'local';
   return (
     <button
       type="button"
       className={`profile-toggle${local ? ' on' : ''}`}
       onClick={() => setProfile(local ? 'live' : 'local')}
-      title={
-        local
-          ? 'Yedek mod: kendi test varlığımız, ayrı sözleşme. Gerçek anchor’a dönmek için tıkla.'
-          : 'Gerçek anchor (SEP-1/10/38/6). Anchor ödeme yapmıyorsa yedeğe geç.'
-      }
+      title={local ? t('profile.tipLocal') : t('profile.tipLive')}
     >
       <span className="profile-dot" />
-      {local ? 'Yedek' : 'Anchor'}
+      {local ? t('profile.local') : t('profile.live')}
     </button>
   );
 }

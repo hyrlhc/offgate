@@ -489,3 +489,12 @@ footer { color: var(--faint); font-size: 12px; text-align: center; margin-top: 2
 }
 .profile-toggle.on { color: #ffd460; border-color: #ffd46055; background: #ffd4600f; }
 .profile-toggle.on .profile-dot { background: #ffd460; }
+
+/* --- Dil anahtari --- */
+.lang-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.lang-toggle button {
+  border: 0; border-radius: 0; background: transparent; color: var(--faint);
+  font-size: 11px; font-weight: 600; padding: 4px 9px; letter-spacing: .04em;
+}
+.lang-toggle button:hover { color: var(--ink); }
+.lang-toggle button.on { background: var(--panel-2); color: var(--ink); }

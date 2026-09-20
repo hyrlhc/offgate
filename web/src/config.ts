@@ -2,6 +2,7 @@
 // Burada hicbir gizli anahtar yok — operator imzasi sunucu tarafinda atiliyor.
 
 import { DEPLOYMENT, PROFILES, isProfile, type Profile, type ProfileName } from '../shared/deployment.js';
+import { getLang, locale } from './lib/i18n.ts';
 
 // --- Profil secimi ---------------------------------------------------------
 //
@@ -83,17 +84,20 @@ export const CONFIG = {
  * firmware'de her zaman donanim numarasi gecer — ikisi karisirsa fis hicbir
  * kapiya uymaz.
  */
-export const GATE_LABELS: Record<string, string> = { M307: 'Kapı 1', M308: 'Kapı 2' };
+const GATE_INDEX: Record<string, number> = { M307: 1, M308: 2 };
 
-export const gateLabel = (gate: string, index = 0) =>
-  GATE_LABELS[gate] ?? `Kapı ${index + 1}`;
+export const gateLabel = (gate: string, index = 0) => {
+  const n = GATE_INDEX[gate] ?? index + 1;
+  return getLang() === 'tr' ? `Kapı ${n}` : `Gate ${n}`;
+};
 
 export const SEP38_TRY = 'iso4217:TRY';
 export const SEP38_USDC = `stellar:${CONFIG.usdcCode}:${CONFIG.usdcIssuer}`;
 
-/** Kurus -> "100.00 TL" */
+/** Kurus -> "100.00 TRY". Ayrac ve etiket dile bagli. */
 export const formatTry = (kurus: number) =>
-  `${(kurus / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL`;
+  `${(kurus / 100).toLocaleString(locale(), { minimumFractionDigits: 2 })} ${
+    getLang() === 'tr' ? 'TL' : 'TRY'}`;
 
 /** rate (TRY/USDC * 1e7) -> "48.785078" */
 export const formatRate = (rate: number) => (rate / 1e7).toFixed(6);

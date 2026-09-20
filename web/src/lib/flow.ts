@@ -6,6 +6,7 @@
 
 import { StrKey } from '@stellar/stellar-sdk';
 import { CONFIG } from '../config.ts';
+import { t } from './i18n.ts';
 import {
   depositExchange, discover, fallbackPayout, makeSession, requestQuote,
   simulateBankTransfer, waitForCompletion,
@@ -27,17 +28,21 @@ export type StepState = 'bekliyor' | 'calisiyor' | 'tamam' | 'hata';
 
 export type Step = { id: StepId; label: string; detail?: string; state: StepState };
 
-export const INITIAL_STEPS: Step[] = [
-  { id: 'gate', label: 'Kapı seçildi', state: 'bekliyor' },
-  { id: 'trustline', label: 'USDC güven hattı', state: 'bekliyor' },
-  { id: 'auth', label: 'Cüzdan doğrulandı', detail: 'SEP-10', state: 'bekliyor' },
-  { id: 'quote', label: 'Kur kilitlendi', detail: 'SEP-38', state: 'bekliyor' },
-  { id: 'deposit', label: 'Ödeme talimatı alındı', detail: 'SEP-6', state: 'bekliyor' },
-  { id: 'bank', label: 'Banka transferi alındı', state: 'bekliyor' },
-  { id: 'settled', label: 'USDC hesabınıza geçti', state: 'bekliyor' },
-  { id: 'lock', label: 'Bakiye zincire kilitlendi', state: 'bekliyor' },
-  { id: 'entitlement', label: 'Bilet imzalandı', detail: 'zincirden doğrulandı', state: 'bekliyor' },
-  { id: 'book', label: 'Geçiş fişleri hazırlandı', state: 'bekliyor' },
+/**
+ * Adim listesi dile bagli oldugu icin sabit degil, fonksiyon. Bilesen her
+ * cizimde yeniden kuruyor; dil degisince etiketler de degisiyor.
+ */
+export const initialSteps = (): Step[] => [
+  { id: 'gate', label: t('steps.gate'), state: 'bekliyor' },
+  { id: 'trustline', label: t('steps.trustline', { asset: CONFIG.usdcCode }), state: 'bekliyor' },
+  { id: 'auth', label: t('steps.auth'), detail: 'SEP-10', state: 'bekliyor' },
+  { id: 'quote', label: t('steps.quote'), detail: 'SEP-38', state: 'bekliyor' },
+  { id: 'deposit', label: t('steps.deposit'), detail: 'SEP-6', state: 'bekliyor' },
+  { id: 'bank', label: t('steps.bank'), state: 'bekliyor' },
+  { id: 'settled', label: t('steps.settled', { asset: CONFIG.usdcCode }), state: 'bekliyor' },
+  { id: 'lock', label: t('steps.lock'), state: 'bekliyor' },
+  { id: 'entitlement', label: t('steps.entitlement'), detail: t('steps.entitlementNote'), state: 'bekliyor' },
+  { id: 'book', label: t('steps.book'), state: 'bekliyor' },
 ];
 
 /** Kapida yapistirlacak paket. Icinde hicbir gizli anahtar yok. */
@@ -101,7 +106,7 @@ export async function runTopUp(
   // Acik bilet varsa kapi zaten zincirde bagli; ek yukleme oraya gider.
   const existing = await accountOf(signer.address);
   await run('gate', async () => existing?.gate ?? gate,
-    (g) => (existing ? `${g} — açık bilet bu kapıda` : `${g} — kullanıcı seçti`));
+    (g) => t(existing ? 'det.gateOpen' : 'det.gateUser', { gate: g }));
 
   // --- Para girisi -------------------------------------------------------
   //
@@ -119,14 +124,14 @@ export async function runTopUp(
 
   if (CONFIG.profile === 'local') {
     await run('trustline', async () => ensureTrustline(signer), (created) =>
-      created ? `yeni ${CONFIG.usdcCode} güven hattı açıldı` : 'zaten açıktı');
+      created ? t('det.trustNew', { asset: CONFIG.usdcCode }) : t('det.trustHad'));
 
     const paid = await run('settled', () => fallbackPayout(signer.address, amountTry),
-      (p) => `${p.amount} ${p.asset} · yedek anchor`);
+      (p) => t('det.fallback', { amount: p.amount, asset: p.asset }));
 
     // Anchor'a ait adimlar bu profilde calismiyor; ekranda oyle gorunsun.
     for (const id of ['auth', 'quote', 'deposit', 'bank'] as StepId[]) {
-      emit(id, 'tamam', 'yedek modda atlandı');
+      emit(id, 'tamam', t('det.skipped'));
     }
     usdcAmount = paid.amount;
     anchorTxId = paid.hash;
@@ -135,12 +140,12 @@ export async function runTopUp(
     const session = makeSession(endpoints, signer);
 
     await run('trustline', async () => ensureTrustline(signer), (created) =>
-      created ? 'yeni güven hattı açıldı' : 'zaten açıktı');
+      created ? t('det.trustNew', { asset: CONFIG.usdcCode }) : t('det.trustHad'));
 
-    await run('auth', async () => session.ensure(), () => 'şifre yok, cüzdan imzası');
+    await run('auth', async () => session.ensure(), () => t('det.authOk'));
 
     const quote = await run('quote', () => requestQuote(session, endpoints, amountTry),
-      (q) => `1 USDC = ${Number(q.total_price).toFixed(6)} TRY`);
+      (q) => t('det.rate', { rate: Number(q.total_price).toFixed(6) }));
 
     const deposit = await run('deposit',
       () => depositExchange(session, endpoints, {
@@ -148,17 +153,17 @@ export async function runTopUp(
       }),
       (d) => {
         const ref = d.instructions?.external_transfer_memo?.value;
-        return ref ? `referans ${ref}` : `emir ${d.id.slice(0, 12)}…`;
+        return ref ? t('det.ref', { ref }) : t('det.order', { id: d.id.slice(0, 12) });
       });
 
     bankReference = deposit.instructions?.external_transfer_memo?.value;
 
     await run('bank', () => simulateBankTransfer(session, endpoints, deposit.id, amountTry),
-      () => 'mock anchor: simulate-bank-transfer');
+      () => t('det.bank'));
 
     const anchorTx = await run('settled',
       () => waitForCompletion(session, endpoints, deposit.id),
-      (t) => `${t.amount_out ?? '?'} USDC`);
+      (tx) => t('det.received', { amount: tx.amount_out ?? '?', asset: CONFIG.usdcCode }));
 
     usdcAmount = anchorTx.amount_out ?? '0';
     anchorTxId = deposit.id;
@@ -213,7 +218,7 @@ export async function runTopUp(
           amount: amountStroops, gate: targetGate, fareTry,
           rate: lockedRate, devicePk: device.publicKey, entHash,
         })),
-    () => `${maxUses} geçiş · kapı ${targetGate}`);
+    () => t('det.locked', { n: maxUses, gate: targetGate }));
 
   // Operator imzasi sunucu tarafinda atilir; gizli anahtar tarayiciya inmez.
   const signed = await run('entitlement', async () => {
@@ -230,7 +235,7 @@ export async function runTopUp(
       throw new Error('sunucu farklı bir entitlement özeti hesapladı — format uyuşmuyor');
     }
     return body as { ent_hash: string; max_uses: number; operator_sig: string; operator_pk: string };
-  }, (b) => `operatör ${b.max_uses} geçiş için imzaladı`);
+  }, (b) => t('det.signed', { n: b.max_uses }));
 
   const bundle = await run('book', async (): Promise<Bundle> => ({
     v: 1,
@@ -248,7 +253,7 @@ export async function runTopUp(
     receipts: buildReceiptBook(device.seed, {
       entHash, user: signer.address, fareTry: entitlement.fareTry, maxUses: entitlement.maxUses,
     }),
-  }), (b) => `${b.receipts.length} fiş imzalandı`);
+  }), (b) => t('det.book', { n: b.receipts.length }));
 
   return {
     bundle,

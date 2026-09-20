@@ -4,6 +4,7 @@ import GateChain from './components/GateChain.tsx';
 import PhoneFrame from './components/PhoneFrame.tsx';
 import TopUpFlow from './TopUpFlow.tsx';
 import Nav from './components/Nav.tsx';
+import { t, useLang } from './lib/i18n.ts';
 import type { Ticket } from './lib/flow.ts';
 
 /**
@@ -15,6 +16,7 @@ import type { Ticket } from './lib/flow.ts';
  */
 export default function App() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  useLang();
 
   return (
     <div className="page demo-page">
@@ -24,9 +26,9 @@ export default function App() {
         <GateChain />
 
         <div className="stage-title">
-          <h1>İnternet yokken de geçiş devam eder.</h1>
-          <p>TL yükle, zincirde kilitle, çevrimdışı geç.</p>
-          <a className="more" href="#nasil">Nasıl çalışır →</a>
+          <h1>{t('stage.title')}</h1>
+          <p>{t('stage.sub')}</p>
+          <a className="more" href="#nasil">{t('stage.more')}</a>
         </div>
 
         <div className="stage-phone">
@@ -37,8 +39,8 @@ export default function App() {
       </main>
 
       <p className="stage-foot">
-        Stellar Testnet · gerçek para hareketi yoktur
-        {ticket && <> · son bilet: kapı {ticket.bundle.gate}</>}
+        {t('stage.foot')}
+        {ticket && <> · {t('stage.lastTicket', { gate: ticket.bundle.gate })}</>}
       </p>
     </div>
   );

@@ -22,11 +22,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import Nav from './components/Nav.tsx';
 import { formatTry, gateLabel } from './config.ts';
+import { t, useLang } from './lib/i18n.ts';
 import {
   contractErrorMessage, gateReport, rebateFor, refundableOf, settle, stroopsToUsdc,
   type CarriedReceipt,
 } from './lib/contract.ts';
-import { createWristband, savedWristbandAddress, type Signer } from './lib/signer.ts';
+import { createWristband, type Signer } from './lib/signer.ts';
 
 type GateReport = { gate: string; counter: number; ts: number; sig: string };
 type Parsed = { receipts: CarriedReceipt[]; report?: GateReport };
@@ -34,22 +35,22 @@ type Parsed = { receipts: CarriedReceipt[]; report?: GateReport };
 /** Kapi sayfasinin urettigi base64 metni cozer. */
 function decode(text: string): Parsed {
   const trimmed = text.trim();
-  if (!trimmed) throw new Error('Metin boş.');
+  if (!trimmed) throw new Error(t('carry.errEmpty'));
   let json: string;
   try {
     let s = trimmed.replace(/-/g, '+').replace(/_/g, '/');
     while (s.length % 4) s += '=';
     json = decodeURIComponent(escape(atob(s)));
   } catch {
-    throw new Error('Metin okunamadı — kapı sayfasından kopyaladığından emin ol.');
+    throw new Error(t('carry.errUnreadable'));
   }
   const o = JSON.parse(json) as Parsed;
   if (!Array.isArray(o.receipts) || o.receipts.length === 0) {
-    throw new Error('İçinde geçiş kaydı yok.');
+    throw new Error(t('carry.errNoReceipts'));
   }
   for (const r of o.receipts) {
     if (!r.ent_hash || !r.gate_sig || !r.gate) {
-      throw new Error('Kayıt eksik — kapı imzası yok.');
+      throw new Error(t('carry.errNoGateSig'));
     }
   }
   return o;
@@ -75,7 +76,7 @@ export default function Carry() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
-  const saved = savedWristbandAddress();
+  useLang();
 
   useEffect(() => {
     if (!text.trim()) { setParsed(null); setError(null); return; }
@@ -130,46 +131,36 @@ export default function Carry() {
     <div className="page">
       <Nav active="carry" />
       <div className="doc-head compact">
-        <span className="eyebrow">Ağa katkı</span>
-        <h1>Kapı verisini zincire taşı</h1>
-        <p className="lede">
-          Turnikeden geçtiğinde kapı sana imzalı bir tahsilat belgesi verdi.
-          Sözleşme imzanın gerçekten o turnikeye ait olduğunu doğrular ve
-          karşılığında paranı geri verir.
-        </p>
+        <span className="eyebrow">{t('carry.eyebrow')}</span>
+        <h1>{t('carry.title')}</h1>
+        <p className="lede">{t('carry.lead')}</p>
       </div>
 
       <section className="card">
-        <h2>Neden taşıyorsun</h2>
+        <h2>{t('carry.whyTitle')}</h2>
         <dl className="kv">
-          <dt>Para üstü</dt>
-          <dd>Kapı daha az tahsil ettiyse fark bakiyende kalır.</dd>
-          <dt>Teminat iadesi</dt>
-          <dd>Taşıdığın her geçiş için %5’lik teminatın %80’i cüzdanına döner.</dd>
-          <dt>İade hakkı</dt>
-          <dd>Açık kalan hak kapandığı için geri çekebileceğin tutar büyür.</dd>
+          <dt>{t('carry.change')}</dt><dd>{t('carry.changeBody')}</dd>
+          <dt>{t('carry.rebate')}</dt><dd>{t('carry.rebateBody')}</dd>
+          <dt>{t('carry.refundable')}</dt><dd>{t('carry.refundableBody')}</dd>
         </dl>
-        <p className="sub" style={{ marginBottom: 0 }}>
-          İşlem ücreti Stellar’da kuruşun altında — bu yüzden böyle bir mikro
-          ödül ekonomisi burada mantıklı.
-        </p>
+        <p className="sub" style={{ marginBottom: 0 }}>{t('carry.feeNote')}</p>
       </section>
 
       <section className="card">
-        <h2>Veriyi yapıştır</h2>
+        <h2>{t('carry.pasteTitle')}</h2>
         {!signer ? (
           <button className="primary" onClick={connect} disabled={busy}>
-            {busy ? 'Bağlanıyor…' : saved ? 'Cüzdanı bağla' : 'Cüzdan bağla'}
+            {busy ? t('flow.connecting') : t('flow.connect')}
           </button>
         ) : (
-          <p className="sub">Cüzdan: <span className="mono">{signer.address}</span></p>
+          <p className="sub">{t('carry.wallet')}: <span className="mono">{signer.address}</span></p>
         )}
 
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={4}
-          placeholder="Kapı sayfasında 'Kopyala' dediğin metni buraya yapıştır…"
+          placeholder={t('carry.placeholder')}
           style={{ width: '100%', marginTop: 12 }}
         />
 
@@ -180,7 +171,7 @@ export default function Carry() {
             <div style={{ overflowX: 'auto' }}>
               <table className="audit">
                 <thead>
-                  <tr><th>Kapı</th><th>Fiş</th><th>Tahsil edilen</th><th>Sana dönen</th></tr>
+                  <tr><th>{t('carry.colGate')}</th><th>{t('carry.colReceipt')}</th><th>{t('carry.colCharged')}</th><th>{t('carry.colBack')}</th></tr>
                 </thead>
                 <tbody>
                   {parsed.receipts.map((r) => (
@@ -197,33 +188,30 @@ export default function Carry() {
               </table>
             </div>
             <p className="sub">
-              Toplam iade: <b>{stroopsToUsdc(total)} USDC</b>
-              {parsed.report && <> · kapı beyanı da taşınacak (sayaç {parsed.report.counter})</>}
+              {t('carry.totalBack')}: <b>{stroopsToUsdc(total)} USDC</b>
+              {parsed.report && <> · {t('carry.alsoReport', { n: parsed.report.counter })}</>}
             </p>
             <button className="primary" onClick={carry} disabled={!signer || busy}>
-              {busy ? 'Zincire yazılıyor…' : 'Zincire yaz ve paramı al'}
+              {busy ? t('carry.submitting') : t('carry.submit')}
             </button>
-            {!signer && <p className="sub">Önce cüzdanını bağla.</p>}
+            {!signer && <p className="sub">{t('carry.connectFirst')}</p>}
           </>
         )}
       </section>
 
       {result && (
         <section className="card">
-          <h2>Oldu</h2>
+          <h2>{t('carry.doneTitle')}</h2>
           <dl className="kv">
-            <dt>Zincire yazılan geçiş</dt><dd>{result.accepted}</dd>
-            <dt>Cüzdanına dönen teminat</dt>
+            <dt>{t('carry.donePasses')}</dt><dd>{result.accepted}</dd>
+            <dt>{t('carry.doneRebate')}</dt>
             <dd className="good">{stroopsToUsdc(result.rebate)} USDC</dd>
-            <dt>Geri çekebileceğin tutar</dt>
+            <dt>{t('carry.doneRefundable')}</dt>
             <dd>
               {stroopsToUsdc(result.before)} → <b>{stroopsToUsdc(result.after)}</b> USDC
             </dd>
           </dl>
-          <p className="sub" style={{ marginBottom: 0 }}>
-            Kapı verisi artık zincirde. Operatörün senkronizasyon yapmasına gerek
-            kalmadı — sen yaptın, karşılığını da aldın.
-          </p>
+          <p className="sub" style={{ marginBottom: 0 }}>{t('carry.doneNote')}</p>
         </section>
       )}
     </div>
