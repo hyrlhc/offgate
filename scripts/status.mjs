@@ -74,8 +74,19 @@ for (const g of gates) {
 }
 const [declared, settled, revenue] = await read('stats', [sym(DEMO.eventId)]);
 info(`toplam  : beyan ${declared} · zincir ${settled} · hasilat ${usdc(revenue)}`);
+// Farkin YONU iki ayri sey anlatiyor; ayni cumleyle gecistirilemez.
+//   beyan > zincir : kapi bu kadar gecis gordugunu soyluyor ama o fisler
+//                    zincire hic ulasmamis — hasilat eksik beyan edilmis
+//                    olabilir, denetimin yakalamak istedigi durum budur.
+//   zincir > beyan : fisler zincirde ama kapinin imzali sayac beyani henuz
+//                    tasinmamis. Kayip yok, yalnizca beyan geride.
 if (declared === settled) ok('Beyan ile zincir tutuyor.');
-else warn(`FARK: ${declared - settled} gecis zincire dusmemis.`);
+else if (declared > settled) {
+  warn(`FARK: kapi ${declared - settled} gecis beyan etti ama o fisler zincirde yok.`);
+} else {
+  info(`Beyan geride: zincirde ${settled - declared} gecis fazla var — kapinin imzali`);
+  info('sayac beyani henuz tasinmamis (gate_report). Hasilat kaybi degil.');
+}
 
 // --- Paralar ---
 step('Bakiyeler');

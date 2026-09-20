@@ -73,7 +73,13 @@ export default function Audit() {
                       <td className="mono">{r.gate}</td>
                       <td>{r.declared}</td>
                       <td>{r.settled}</td>
-                      <td className={diff === 0 ? 'good' : 'bad'}>{diff === 0 ? '0 ✓' : diff}</td>
+                      {/* Farkin yonu iki ayri sey anlatiyor: beyan zincirden
+                          fazlaysa fisler kayip (denetimin aradigi durum),
+                          azsa yalnizca kapinin imzali beyani henuz
+                          tasinmamis — hasilat kaybi degil. */}
+                      <td className={diff > 0 ? 'bad' : 'good'}>
+                        {diff === 0 ? '0 ✓' : diff > 0 ? `${diff} eksik` : `beyan ${-diff} geride`}
+                      </td>
                       <td>{r.load}</td>
                     </tr>
                   );
