@@ -582,3 +582,87 @@ simgesi gösteriliyor — nakit sezgisi.
 
 Ek yüklemede kur zincirde kilitli kalır; kullanıcının geçiş başına ödediği TL
 piyasa oynasa da değişmez.
+
+---
+
+## Veri taşıma ödülü, para üstü ve güvenli iade — yeni dağıtım
+
+| Alan | Değer |
+|---|---|
+| **Contract ID** | `CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH` |
+| Gezgin | https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH |
+| Etkinlik | `FEST26` |
+| `M307` (Kapı 1) | ücret **100 TL** · pk `65823a1302e0f2451807c7e2f69ca1387a15e3de4f97ac263bc844c0d42472e5` |
+| `M308` (Kapı 2) | ücret **80 TL** · pk `80258f32995c7a6cbed5aac6d3f3fadd2a260418dde84f08c40cd7ab0ca3d9ab` |
+
+Kapı açık anahtarları artık zincirde: sözleşme tahsilat belgelerini bununla
+doğruluyor. Turnikenin seri portta bastığı `kimlik` satırı ile
+`gate_pk_of(gate)` **aynı olmak zorunda**.
+
+### Neden yeni dağıtım
+
+Sözleşme veri modeli değişti: `Acct.fee_held`, `Receipt.charged_try`,
+`Receipt.gate_sig`, `DataKey::GatePk`. Eski kayıtlar yeni biçimde okunamaz.
+
+### Uçtan uca doğrulama — gerçek donanım, gerçek zincir
+
+```
+lock_float(user, 21522975, FEST26, M307, fare 10000, rate 487850780)
+  balance   20498071    (net)
+  fee_held   1024904    (%5 teminat)
+  granted          1
+
+M307 bileti, 80 TL'lik M308 kapısına sunuldu
+  M308 -> M307  "şu fişi yakar mısın"     (ESP-NOW, imzalı)
+  M307 -> M308  YAKILDI, onay verildi      344 ms
+  kapı yanıtı   charged_try 8000 · change_try 2000
+  kapı imzası   84add77e…ec03
+
+settle(M308, [fiş])   izin gerektirmeden, kullanıcının kendisi taşıdı
+  işlem       44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6
+  kabul       1 fiş
+```
+
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| Operatör USDC | 0.0000000 | **1.6398456** |
+| Kullanıcı USDC | 1.8943720 | **1.9599658** |
+| Bakiye (para üstü) | 2.0498071 | **0.4099615** |
+| Tutulan teminat | 0.1024904 | **0.0368966** |
+| **İade edilebilir** | **0.0000000** | **0.4468581** |
+
+Operatöre geçen tutar **80 TL karşılığı**, 100 TL değil — kapı ne imzaladıysa o.
+İade edilebilir tutarın sıfırdan çıkması ise mekanizmanın kalbi: veriyi
+taşımadan önce kullanıcı hiçbir şey çekemiyordu.
+
+### Yol boyunca çıkan ve düzeltilen hatalar
+
+- **`RESET` kapının kimliğini siliyordu.** `nvs.clear()` her şeyi siler; sonraki
+  açılışta kapı yeni anahtar üretip zincirdeki kaydını geçersiz kılıyordu.
+  Artık kimlik temizlikten sonra geri yazılıyor. (Bu hata testte bizzat
+  gerçekleşti: kapı kimlikleri değişti ve sözleşme yeniden dağıtıldı.)
+- **Komşu keşfi tek yönlü kalabiliyordu.** Soru yalnızca *tanınan* komşudan
+  kabul edildiği için, tek yönlü keşif sessiz bir kilitlenme üretiyordu
+  (`no_answer`, 6 sn). Artık yeni komşu duyulunca periyot beklenmeden
+  karşılık veriliyor.
+- **`nativeToScVal` nesne anahtarlarını `scvString` yapıyor**, Soroban ise
+  `scvSymbol` bekliyor. Web tarafında `Receipt` ScVal'i elle kuruluyor.
+
+### Testler
+
+`cargo test -p offgate` → **46/46 geçiyor**
+
+| Yeni test | Ne kanıtlıyor |
+|---|---|
+| `settle_charges_only_what_the_gate_signed` | Para üstü bakiyede kalıyor |
+| `settle_rejects_a_charge_above_the_signed_fare` | Kapı fazla tahsil edemez |
+| `settle_pays_back_the_service_fee_to_whoever_carries_the_data` | İade cüzdana düşüyor |
+| `rebate_never_exceeds_the_fee_that_was_collected` | İade alınandan fazla olamaz |
+| `anyone_can_carry_the_data_on_chain` | `settle` izin gerektirmiyor |
+| `refund_cannot_take_back_money_for_passes_used_offline` | **İade açığı kapandı** |
+| `settling_receipts_unlocks_what_refund_had_reserved` | Taşıma rezervi çözüyor |
+| `settle_accepts_a_pass_taken_at_a_neighbouring_gate` | Komşu kapı geçişi settle ediliyor |
+| `settle_rejects_a_voucher_signed_by_a_different_gate` | Belge kapıya bağlı |
+| `gate_report_requires_the_gate_signature` | Beyanı operatör yazamaz |
+| `gate_report_ignores_a_replayed_older_counter` | Sayaç geri gitmez |
+| `gate_key_can_be_rotated` | Bozulan turnike değiştirilebilir |

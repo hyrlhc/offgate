@@ -9,7 +9,7 @@
 | | |
 |---|---|
 | **Live app** | https://offgate.vercel.app |
-| **Contract (testnet)** | [`CCXEH644…M7KXWPLX`](https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX) |
+| **Contract (testnet)** | [`CAYBDH2A…NHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Hardware** | 2 × ESP32 — `M307` (Gate 1), `M308` (Gate 2) |
 | **Network** | Stellar Testnet · no real money moves |
 
@@ -278,6 +278,88 @@ which proves M307 really burned it before approving. Double spending is closed.
 
 ---
 
+## Change, and the reward for carrying data
+
+When you pass through a turnstile, the gate hands you a **signed collection
+voucher**: *"I am M308, I charged 80 TRY against this receipt."* That single
+signature solves three problems at once.
+
+### 1 · Change
+
+The ticket's ceiling is in the **user's** signature; the amount actually
+charged is in the **gate's**. Use a 100 TRY allowance at an 80 TRY gate and
+the remaining 20 TRY stays in your balance.
+
+The two signatures pin each other down:
+
+| What the gate cannot do | Why |
+|---|---|
+| Overcharge | The ceiling is in the user's signature; the contract refuses |
+| Under-report | The operator receives the money — it is against the gate's interest |
+
+This turns the system from a turnstile into **closed-venue spending**: each
+gate can set its own price.
+
+### 2 · Paying whoever carries the data
+
+`settle` now needs **no authorisation.** Each document verifies itself, so it
+does not matter who carries it. Whoever does gets back **80% of the 5%
+service fee**.
+
+Settlement is therefore performed by **users**, not the operator — out of
+self-interest, for free. The gate's data reaches the chain on its own.
+
+**Why Stellar:** claiming the reward requires a transaction, and that
+transaction costs **$0.00001**. On Ethereum the gas would exceed the reward
+and the mechanism would be pointless. The reward is also funded by **fees,
+not inflation**: no token, no dilution, self-funding.
+
+### 3 · Safe refunds — and the end of cancellation
+
+`refund` used to return the entire balance. A user could walk through the
+gate and take a refund before the receipts reached the chain, making **those
+passes free.**
+
+Now outstanding signed passes are reserved. What keeps this fair to the user
+is the reward itself: carrying their own receipt dissolves the reservation
+and releases the money **in the same transaction**.
+
+> **The way to get a refund is to carry the data.** Cancellation ceases to
+> exist as a separate operation.
+
+### The economics
+
+The real marginal cost of running the system is the **anchor spread, ~1%**
+(measured: `price` 48.785 vs `total_price` 49.029). Chain fees come to **under
+$5 for a thousand users**.
+
+| | Fee | Rebate | Net if you carry | Net if you don't |
+|---|---|---|---|---|
+| OffGate | 5% | 80% | **1%** | 5% |
+| Card terminal (TR) | 1.5–2.5% | — | — | — |
+| Festival cashless | 2–4% + wristband | — | — | — |
+
+For a carrier the net cost equals the anchor spread exactly: **carry the data
+and the system is free**. The margin comes from those who do not — the same
+people who leave the operator to do the settling.
+
+### Verified on chain — real hardware, real money
+
+A ticket issued for M307, used at the 80 TRY gate M308
+([transaction](https://stellar.expert/explorer/testnet/tx/44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6)):
+
+| | Result |
+|---|---|
+| To the operator | **1.6398456 USDC** — 80 TRY, not 100 |
+| Rebate to the user | **+0.0655938 USDC** |
+| Change left in balance | **0.4099615 USDC** = 20 TRY |
+| **Refundable amount** | **0 → 0.4468581 USDC** |
+
+That last row is the heart of it: before carrying the data the user could
+withdraw nothing; carrying it released the lock.
+
+---
+
 ## Required declarations
 
 ### Integration partner — Stellar Wallets Kit
@@ -307,7 +389,7 @@ chain. Without Wallets Kit the flow stops at step one.
 
 | Field | Value |
 |---|---|
-| **Contract ID** | [`CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX`](https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX) |
+| **Contract ID** | [`CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Frontend** | https://offgate.vercel.app |
 | Event · gates | `FEST26` · `M307`, `M308` |
 | admin | [`GDE7PTP7…EGLG7HJ`](https://stellar.expert/explorer/testnet/account/GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ) |
@@ -449,7 +531,10 @@ POST /api/sign-entitlement  {"user":"GCWN…","expires":…,"maxUses":999}
 | Tampering with the fare | `fare_try` is inside the signed message |
 | Changing the sequence number | `seq` is inside the signed message |
 | Using another gate's ticket | The ticket is bound to a `gate`; a foreign gate must ask permission |
-| The operator under-reporting revenue | `settle` and `gate_report` are independent; `stats` exposes the gap |
+| The operator under-reporting revenue | `gate_report` carries the gate's **own** signature; the operator cannot write the number |
+| Passing through and then clawing the money back | Outstanding signed passes are reserved during `refund` |
+| A gate overcharging | The ceiling lives in the user's signature |
+| Replaying an old declaration | The counter only moves forward |
 | Opening the device to steal keys | There is no secret key on the ESP32 — only the operator's *public* key |
 | A forged neighbouring gate | Questions are accepted only from known neighbours, Ed25519-signed, with a nonce |
 
@@ -463,10 +548,10 @@ was considered and rejected: at roughly 30 bits of entropy it is breakable
 offline. **Fix:** a native mobile app (which, per K-8, needs no firmware
 change).
 
-**`refund` can be called at any time.** If a user passes through the gate and
-takes a refund before the operator runs `settle`, those passes were free.
-**Fix:** subtract outstanding signed passes from the refundable amount and keep
-the remainder locked until the ticket expires. Requires a contract change.
+**A neighbouring gate can verify a ticket's validity but not whether it has
+been spent.** If the network partitions, the gate fails closed (it refuses),
+so what is lost is availability, not safety. **Fix:** connect gates to more
+than one neighbour; the protocol is ready for four.
 
 **The turnstile cannot enforce `expires`.** It has no clock. Expiry is
 currently checked only at the signing endpoint (48-hour ceiling). **Fix:** an
@@ -486,7 +571,7 @@ visible as the `lost` field on `/health`.
 
 ## Test evidence
 
-### Contract — 32/32 passing
+### Contract — 46/46 passing
 
 ```sh
 cargo test -p offgate
@@ -555,7 +640,7 @@ contract and the web app, and the reason is visible immediately.
 git clone https://github.com/hyrlhc/offgate && cd offgate
 cp .env.example .env          # then fill in your own keys
 
-cargo test -p offgate         # 32 tests
+cargo test -p offgate         # 46 tests
 stellar contract build        # -> target/wasm32v1-none/release/offgate.wasm
 ```
 
@@ -617,7 +702,7 @@ RESET        clears the counter and the spent-receipt ledger
 
 ```
 contracts/offgate/src/lib.rs   Soroban contract — lock_float, top_up, settle, refund, audit
-contracts/offgate/src/test.rs  32 host tests with real Ed25519 signatures
+contracts/offgate/src/test.rs  46 host tests with real Ed25519 signatures
 
 web/shared/deployment.js       The SINGLE source of deployment constants
 web/src/lib/signer.ts          Stellar Wallets Kit — integration partner

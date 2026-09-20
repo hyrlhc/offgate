@@ -547,3 +547,114 @@ oluyordu; artık sayılıyor ve `/health` içinde `lost` alanında görünüyor.
 Bölüm tablosunu büyütmeyi denedim, `esp32dev` önyükleyicisi uygulamayı
 bulamayıp reset döngüsüne girdi; geri alındı. Demo öncesi `/reset` ile defteri
 boşaltmak şimdilik yeterli çözüm.
+
+---
+
+## 16. Para üstü ve veri taşıma ödülü
+
+Bu bölüm sistemin son halkası. Üç ayrı problem tek bir imzayla çözülüyor.
+
+### Kapı artık imza atıyor
+
+Geçiş kabul edildiğinde kapı sana bir belge veriyor:
+
+```
+"OFFGATE-VCHR-v1"(15) ‖ ent_hash(32) ‖ seq(4) ‖ tahsil_edilen(8) ‖ ts(8) = 67 bayt
++ kapının imzası (64)
+```
+
+Okunuşu: *"Ben bu kapıyım, şu fişten şu kadar tahsil ettim."*
+
+Kapı kimliği mesajın **içinde yok** — imzayı doğrulayan açık anahtar zaten
+hangi kapı olduğunu söylüyor. Sözleşme kapının açık anahtarını
+`register_gate` ile biliyor.
+
+### Problem 1 — para üstü
+
+Bilet 100 TL'ye kadar izin veriyor. M308 kapısı 80 TL'lik. Aradaki 20 TL ne olacak?
+
+Cevap: **iki ayrı imza.**
+
+| İmza | Ne diyor | Kim atıyor |
+|---|---|---|
+| Fiş | "en fazla 100 TL harcanabilir" | Kullanıcının cihaz anahtarı |
+| Belge | "80 TL tahsil ettim" | Kapının anahtarı |
+
+Sözleşme fişten **tam ücreti değil**, kapının imzaladığı tutarı düşüyor.
+20 TL bakiyende kalıyor.
+
+Kapı kandıramaz:
+
+- **Fazla tahsil edemez** — üst sınır kullanıcının imzasında, sözleşme reddeder.
+- **Eksik beyan etmesi işine gelmez** — parayı operatör alıyor.
+
+### Problem 2 — veriyi kim taşıyacak
+
+Kapı çevrimdışı. Fişlerin zincire yazılması lazım. Eskiden bunu görevli
+yapıyordu: gün sonu kapıya bağlan, fişleri çek, `settle` çalıştır.
+
+Artık `settle` **izin gerektirmiyor**. Belge kendi kendini doğruluyor, yani
+veriyi kimin taşıdığının hiçbir önemi yok.
+
+Ve taşıyana para veriyoruz: **%5 hizmet bedelinin %80'i.**
+
+Sonuç: senkronizasyonu kullanıcılar yapıyor. Kendi çıkarları için, bedavaya.
+
+> Bu neden Stellar'da mantıklı: ödülü almak için bir işlem göndermen gerekiyor
+> ve o işlem **$0.00001**. Ethereum'da gas ödülden büyük olurdu.
+
+### Problem 3 — iade açığı
+
+En büyük açığımız buydu. `refund` bütün bakiyeyi geri veriyordu. Yani:
+
+1. Kullanıcı 4 geçişlik bilet alıyor
+2. Dört kapıdan da geçiyor (fişler kapıda, henüz zincirde değil)
+3. `refund` çağırıyor, **parasının tamamını** geri alıyor
+4. Operatör fişleri getirdiğinde bakiye sıfır — geçişler bedava kalmış
+
+**Çözüm:** açıkta kalan imzalı haklar rezerve ediliyor.
+
+```
+açıkta_kalan = granted - used
+rezerve      = açıkta_kalan × tam_ücret
+iade         = bakiye - rezerve
+```
+
+Kapılar çevrimdışı olduğu için zincir, imzalanmış bir hakkın kullanılıp
+kullanılmadığını **bilemez**. O yüzden en kötü ihtimali varsayıyor.
+
+### Üçü nasıl birleşiyor
+
+Rezervasyon tek başına kullanıcıyı mağdur ederdi: parası kilitli kalırdı.
+Ama fişini **kendisi taşıyınca** `used` artıyor, rezerv düşüyor ve para
+**aynı işlemde** serbest kalıyor.
+
+> **İade almanın yolu veriyi taşımaktan geçiyor.**
+> İptal diye ayrı bir işlem kalmıyor.
+
+### Gerçek sayılarla
+
+M307 için alınmış bilet, 80 TL'lik M308 kapısında kullanıldı:
+
+| | Önce | Sonra |
+|---|---|---|
+| Operatör | 0 USDC | **1.6398456** (80 TL, 100 değil) |
+| Kullanıcı cüzdanı | 1.8943720 | **1.9599658** (+teminat iadesi) |
+| Bakiyedeki para üstü | — | **0.4099615** (20 TL) |
+| **Geri çekebileceği** | **0** | **0.4468581** |
+
+Son satır her şeyi anlatıyor: veriyi taşımadan önce hiçbir şey çekemiyordu.
+
+### Ekonomi
+
+Sistemi işletmenin gerçek maliyeti **anchor makası kadar, ~%1**. Zincir
+ücretleri 1000 kullanıcıda 5 doların altında.
+
+| | Ücret | İade | Taşıyana net |
+|---|---|---|---|
+| OffGate | %5 | %80 | **%1** |
+| POS komisyonu | %1.5–2.5 | — | — |
+
+Taşıyan için net maliyet tam olarak anchor makasına eşit: **veriyi taşırsan
+sistem sana bedava.** Marj, taşımayanlardan geliyor — senkronizasyon işini
+operatöre çıkaranlardan.

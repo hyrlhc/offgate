@@ -9,7 +9,7 @@
 | | |
 |---|---|
 | **Canlı uygulama** | https://offgate.vercel.app |
-| **Sözleşme (testnet)** | [`CCXEH644…M7KXWPLX`](https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX) |
+| **Sözleşme (testnet)** | [`CAYBDH2A…NHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Donanım** | 2 × ESP32 — `M307` (Kapı 1), `M308` (Kapı 2) |
 | **Ağ** | Stellar Testnet · gerçek para hareketi yoktur |
 
@@ -267,6 +267,87 @@ onay vermeden önce fişi gerçekten yakmış. Çifte harcama kapalı.
 
 ---
 
+## Para üstü ve veri taşıma ödülü
+
+Turnikeden geçtiğinde kapı sana **imzalı bir tahsilat belgesi** veriyor:
+*"Ben M308'im, şu fişten 80 TL tahsil ettim."* Bu tek imza üç problemi
+birden çözüyor.
+
+### 1 · Para üstü
+
+Biletin üst sınırı **kullanıcının** imzasında, fiilen tahsil edilen tutar
+**kapının** imzasında. 100 TL'lik hakla 80 TL'lik kapıdan geçersen aradaki
+20 TL bakiyende kalır.
+
+İki imza birbirini kıstırıyor:
+
+| Kapı ne yapamaz | Neden |
+|---|---|
+| Fazla tahsil etmek | Üst sınır kullanıcının imzasında; sözleşme reddeder |
+| Eksik beyan etmek | Parayı operatör alıyor — kapının işine gelmez |
+
+Bu, sistemi turnikeden **kapalı alan harcamasına** dönüştürüyor: her kapı
+kendi fiyatını koyabilir.
+
+### 2 · Veriyi taşıyana ödül
+
+`settle` artık **izin gerektirmiyor.** Belge kendi kendini doğruladığı için
+veriyi kimin taşıdığının önemi yok. Taşıyana, aldığımız **%5 hizmet
+bedelinin %80'i** geri ödeniyor.
+
+Yani senkronizasyonu operatör değil **kullanıcılar** yapıyor — kendi çıkarları
+için, bedavaya. Kapı verisi zincire kendiliğinden ulaşıyor.
+
+**Neden Stellar:** ödül talebi bir işlem gerektiriyor ve o işlem
+**$0.00001**. Ethereum'da gas ödülden büyük olurdu ve mekanizma anlamsızlaşırdı.
+Ayrıca ödül enflasyondan değil **ücretten** finanse ediliyor: token yok,
+seyreltme yok, kendi kendini finanse ediyor.
+
+### 3 · Güvenli iade — ve iptalin kalkması
+
+Eskiden `refund` bütün bakiyeyi veriyordu. Kullanıcı kapıdan geçip, fişler
+zincire yazılmadan önce iade alabilir ve **o geçişler bedava kalırdı.**
+
+Artık açıkta kalan imzalı haklar rezerve ediliyor. Kullanıcıyı mağdur
+etmeyen şey de ödül: fişini kendisi taşıyınca rezerv çözülüyor ve para
+**aynı işlemde** serbest kalıyor.
+
+> **İade almanın yolu veriyi taşımaktan geçiyor.** İptal diye ayrı bir işlem
+> kalmıyor.
+
+### Ekonomi
+
+Sistemi işletmenin gerçek marjinal maliyeti **anchor makası kadar: ~%1**
+(ölçüldü: `price` 48.785 vs `total_price` 49.029). Zincir ücretleri 1000
+kullanıcıda **5 doların altında**.
+
+| | Ücret | İade | Taşıyana net | Taşımayana net |
+|---|---|---|---|---|
+| OffGate | %5 | %80 | **%1** | %5 |
+| POS komisyonu (TR) | %1.5–2.5 | — | — | — |
+| Festival cashless | %2–4 + bileklik | — | — | — |
+
+Taşıyan için net maliyet **tam olarak anchor makasına eşit**: veriyi
+taşırsan sistem sana bedava. Marj, taşımayanlardan geliyor — ki senkronizasyon
+işini operatöre çıkaranlar onlar.
+
+### Zincirde doğrulandı — gerçek donanım, gerçek para
+
+M307 için alınmış bilet, 80 TL'lik M308 kapısından kullanıldı
+([işlem](https://stellar.expert/explorer/testnet/tx/44a7e31c76e19dc9b0ee06864c7e9919f5ceffe7150bd4131a6a4e89a588aaa6)):
+
+| | Sonuç |
+|---|---|
+| Operatöre geçen | **1.6398456 USDC** — 80 TL, 100 değil |
+| Kullanıcıya dönen teminat | **+0.0655938 USDC** |
+| Bakiyede kalan para üstü | **0.4099615 USDC** = 20 TL |
+| **İade edilebilir tutar** | **0 → 0.4468581 USDC** |
+
+Son satır mekanizmanın kalbi: veriyi taşımadan önce kullanıcı hiçbir şey
+çekemiyordu, taşıyınca kilit çözüldü.
+
+---
+
 ## Zorunlu beyanlar
 
 ### Entegrasyon ortağı — Stellar Wallets Kit
@@ -296,7 +377,7 @@ yolu bu imzadır. Wallets Kit olmadan akış ilk adımda durur.
 
 | Alan | Değer |
 |---|---|
-| **Contract ID** | [`CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX`](https://stellar.expert/explorer/testnet/contract/CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX) |
+| **Contract ID** | [`CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Frontend** | https://offgate.vercel.app |
 | Etkinlik · kapılar | `FEST26` · `M307`, `M308` |
 | admin | [`GDE7PTP7…EGLG7HJ`](https://stellar.expert/explorer/testnet/account/GDE7PTP774PCYBE5N6QCPG4QKGYCCSOUWUPDISBBKPKI3CDIUEGLG7HJ) |
@@ -430,7 +511,10 @@ POST /api/sign-entitlement  {"user":"GCWN…","expires":…,"maxUses":999}
 | Ücreti oynatma | `fare_try` imzalı mesajın içinde |
 | Sıra numarasını değiştirme | `seq` imzalı mesajın içinde |
 | Başka kapının biletini kullanma | Bilet `gate`'e bağlı; yabancı kapı izin almak zorunda |
-| Operatörün hasılatı eksik beyan etmesi | `settle` ve `gate_report` bağımsız; `stats` farkı gösterir |
+| Operatörün hasılatı eksik beyan etmesi | `gate_report` kapının **kendi** imzasıyla; operatör sayıyı yazamaz |
+| Kapıdan geçip parayı geri çekmek | Açık imzalı haklar `refund`ta rezerve edilir |
+| Kapının fazla tahsil etmesi | Üst sınır kullanıcının imzasında |
+| Eski beyanı tekrar oynatmak | Sayaç yalnızca ileri gider |
 | Cihazı söküp anahtar çalma | ESP32'de gizli anahtar yok — yalnızca operatörün *açık* anahtarı |
 | Sahte komşu kapı | Soru yalnızca tanınan komşudan, Ed25519 imzalı, nonce'lu |
 
@@ -443,10 +527,10 @@ tarayıcı aradaki geçişe izin vermiyor. PIN denendi, ~30 bit entropi ile
 çevrimdışı kırılabilir olduğu için reddedildi. **Çözüm:** native mobil
 uygulama (K-8 ile firmware değişikliği gerektirmez).
 
-**`refund` her an çağrılabilir.** Kullanıcı kapıdan geçip, operatör `settle`
-etmeden önce iade alırsa o geçişler bedava kalır. **Çözüm:** iade edilebilir
-tutardan açıkta kalan imzalı hakları düşmek, kalanını biletin süresi dolana
-kadar kilitli tutmak. Sözleşme değişikliği gerektirir.
+**Komşu kapı biletin geçerliliğini tek başına doğrular ama harcanmışlığını
+doğrulayamaz.** Ağ bölünürse kapı fail-closed davranır (geçirmez), yani
+güvenlik değil erişilebilirlik kaybı olur. **Çözüm:** kapıların birden fazla
+komşuya bağlanması; protokol dört komşuya kadar hazır.
 
 **Turnike `expires` alanını zorlayamıyor.** Saati yok. Süre kontrolü şu an
 yalnızca imza ucunda (48 saat üst sınır). **Çözüm:** RTC modülü veya görevli
@@ -465,7 +549,7 @@ kayıp `/health` ucunda `lost` alanında görünüyor.
 
 ## Test kanıtı
 
-### Sözleşme — 32/32 geçiyor
+### Sözleşme — 46/46 geçiyor
 
 ```sh
 cargo test -p offgate
@@ -534,7 +618,7 @@ demektir ve sebebi hemen görülür.
 git clone https://github.com/hyrlhc/offgate && cd offgate
 cp .env.example .env          # sonra kendi anahtarlarını doldur
 
-cargo test -p offgate         # 32 test
+cargo test -p offgate         # 46 test
 stellar contract build        # -> target/wasm32v1-none/release/offgate.wasm
 ```
 
@@ -594,7 +678,7 @@ RESET        sayacı ve harcanmış fişleri sıfırlar
 
 ```
 contracts/offgate/src/lib.rs   Soroban sözleşmesi — lock_float, top_up, settle, refund, denetim
-contracts/offgate/src/test.rs  32 host testi, gerçek Ed25519 imzalarıyla
+contracts/offgate/src/test.rs  46 host testi, gerçek Ed25519 imzalarıyla
 
 web/shared/deployment.js       Dağıtım sabitlerinin TEK kaynağı
 web/src/lib/signer.ts          Stellar Wallets Kit — entegrasyon ortağı
