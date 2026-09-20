@@ -123,6 +123,27 @@ contract does is *commit* a digest; the operator signs, and only signs a
 document that matches what the chain already committed. The steps below trace
 one ticket from purchase to settlement and name the key involved at each point.
 
+### Who the operator is
+
+The operator is the event organiser: the party that installs the gates and
+receives the revenue. It is not the contract, not the browser and not the gate.
+
+In this repository it is a single server-side endpoint,
+[`web/api/sign-entitlement.js`](web/api/sign-entitlement.js), running as a
+Vercel serverless function. The Ed25519 private key it signs with is held there
+as a secret and is never sent to the browser.
+
+The contract stores two separate things about the operator, and they are
+different keys with different jobs:
+
+| On chain | What it is | Used for |
+|---|---|---|
+| `operator()` | A Stellar account address | Where `settle` sends the revenue |
+| `operator_pk()` | A raw Ed25519 public key | What the gates verify entitlement signatures against |
+
+The same public key is compiled into the gate firmware, so a gate can verify
+without any connection, and an auditor can compare the two.
+
 ### Step 1. The user commits the ticket digest on chain
 
 The browser builds the entitlement: the user's public key, the device public
@@ -203,6 +224,25 @@ through `register_gate`.
 - `(ent_hash, seq)` must not already be marked spent on chain.
 
 Only then does the money move.
+
+### Why nobody else can issue a ticket
+
+Everything needed to build the 138 bytes is public. The contract is readable by
+anyone, `account_of` returns the gate, fare, rate, device key and digest, and
+SHA-256 is a public function. Anyone can recompute the same digest and get the
+same 32 bytes.
+
+That was never the secret. The digest is a link between three places, not a
+password.
+
+What cannot be reproduced is the signature over those bytes. Producing it
+requires the operator's Ed25519 private key, which exists in one place on one
+server. The gate carries only the matching public key and accepts nothing that
+fails against it.
+
+So copying the chain data gives you a correct digest and no signature, and the
+gate refuses. Reading the firmware gives you a public key, which verifies
+signatures and cannot create them.
 
 ### How the gate knows the data came from the chain
 

@@ -123,6 +123,27 @@ yalnızca zincirin zaten taahhüt ettiği belgeyi imzalar. Aşağıdaki adımlar
 bileti satın alınmasından senkronizasyonuna kadar izliyor ve her noktada hangi
 anahtarın devrede olduğunu söylüyor.
 
+### Operatör kim
+
+Operatör, etkinliğin organizatörüdür: kapıları kuran ve hasılatı alan taraf.
+Sözleşme değildir, tarayıcı değildir, kapı değildir.
+
+Bu depoda tek bir sunucu tarafı ucundan ibarettir:
+[`web/api/sign-entitlement.js`](web/api/sign-entitlement.js), Vercel serverless
+fonksiyonu olarak çalışır. İmzaladığı Ed25519 gizli anahtarı orada bir secret
+olarak durur ve tarayıcıya hiç gönderilmez.
+
+Sözleşme operatör hakkında iki ayrı şey saklar; bunlar farklı işleri olan farklı
+anahtarlardır:
+
+| Zincirde | Nedir | Ne için kullanılır |
+|---|---|---|
+| `operator()` | Bir Stellar hesap adresi | `settle` hasılatı buraya gönderir |
+| `operator_pk()` | Ham Ed25519 açık anahtarı | Kapıların bilet imzalarını doğruladığı anahtar |
+
+Aynı açık anahtar kapı firmware'ine derlenerek gömülüdür; böylece kapı hiçbir
+bağlantı olmadan doğrulayabilir ve bir denetçi ikisini karşılaştırabilir.
+
 ### Adım 1. Kullanıcı bilet özetini zincire taahhüt eder
 
 Tarayıcı bileti kurar: kullanıcının açık anahtarı, cihazın açık anahtarı,
@@ -202,6 +223,25 @@ kayıtlıdır.
 - `(ent_hash, seq)` zincirde zaten harcanmış işaretli olmamalıdır.
 
 Ancak bunların hepsi geçerse para hareket eder.
+
+### Başkası neden bilet düzenleyemiyor
+
+138 baytı kurmak için gereken her şey herkese açıktır. Sözleşmeyi herkes
+okuyabilir, `account_of` kapıyı, ücreti, kuru, cihaz anahtarını ve özeti
+döndürür, SHA-256 da herkese açık bir fonksiyondur. Herkes aynı özeti yeniden
+hesaplayıp aynı 32 baytı elde edebilir.
+
+Zaten gizli olan şey o değildi. Özet, üç yer arasındaki bir bağdır; parola
+değildir.
+
+Yeniden üretilemeyen şey, o baytların üzerine atılan imzadır. Onu üretmek
+operatörün Ed25519 gizli anahtarını gerektirir; o anahtar tek bir sunucuda, tek
+bir yerde bulunur. Kapı yalnızca eşleşen açık anahtarı taşır ve ona karşı
+doğrulanmayan hiçbir şeyi kabul etmez.
+
+Yani zincirdeki veriyi kopyalamak size doğru bir özet ve hiç imza vermez, kapı
+da reddeder. Firmware'i okumak size bir açık anahtar verir; o anahtar imza
+doğrular, imza üretemez.
 
 ### Kapı, verinin zincirden geldiğini nasıl anlıyor
 
