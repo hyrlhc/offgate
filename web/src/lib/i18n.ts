@@ -196,6 +196,10 @@ const EN: Dict = {
   'det.locked': '{n} passes · gate {gate}',
   'det.signed': 'operator signed for {n} passes',
   'det.book': '{n} receipts signed',
+  'err.deviceKeyLost': 'This wallet already has an open ticket on chain, but the '
+    + 'device key that created it is not in this browser. Receipts can only be '
+    + 'signed by that key. Open the app in the browser you first bought from, or '
+    + 'use a different wallet. No money has been moved.',
   'audit.match': 'Declaration matches the chain — no missing revenue.',
   'audit.mismatch': 'MISMATCH: {n} passes never reached the chain.',
   'audit.behindNote': 'Declaration is {n} behind — the gate’s signed counter has not been carried yet. No revenue lost.',
@@ -349,6 +353,10 @@ const TR: Dict = {
   'det.locked': '{n} geçiş · kapı {gate}',
   'det.signed': 'operatör {n} geçiş için imzaladı',
   'det.book': '{n} fiş imzalandı',
+  'err.deviceKeyLost': 'Bu cüzdanın zincirde açık bir bileti var, ancak onu '
+    + 'oluşturan cihaz anahtarı bu tarayıcıda yok. Fişleri yalnızca o anahtar '
+    + 'imzalayabilir. İlk alışverişi yaptığın tarayıcıdan aç ya da başka bir '
+    + 'cüzdan kullan. Para hareket etmedi.',
   'audit.match': 'Beyan ile zincir tutuyor — eksik hasılat yok.',
   'audit.mismatch': 'FARK VAR: {n} geçiş zincire düşmemiş.',
   'audit.behindNote': 'Beyan {n} geride — kapının imzalı sayacı henüz taşınmamış. Hasılat kaybı değil.',

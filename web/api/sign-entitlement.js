@@ -165,9 +165,30 @@ export default async function handler(req, res) {
     const bytes = entitlementBytes(ent);
     const entHash = createHash('sha256').update(bytes).digest('hex');
     if (entHash !== hex(acct.ent_hash)) {
+      // Imza yine de verilmiyor; asagisi yalnizca teshis. Istemcinin kendi
+      // hesapladigi alanlari, zincirden okudugumuzla karsilastirip FARKLI
+      // OLANIN ADINI donuyoruz. Degerlere guvenmiyoruz, imzaya girmiyorlar.
+      const seen = req.body?.built ?? {};
+      const differs = [];
+      const cmp = (name, mine, theirs) => {
+        if (theirs !== undefined && String(theirs) !== String(mine)) {
+          differs.push(`${name}: zincirde ${mine}, tarayicida ${theirs}`);
+        }
+      };
+      cmp('device_pk', ent.devicePk, seen.devicePk);
+      cmp('event', ent.event, seen.event);
+      cmp('gate', ent.gate, seen.gate);
+      cmp('fare_try', ent.fareTry, seen.fareTry);
+      cmp('rate', ent.rate, seen.rate);
+      cmp('max_uses', ent.maxUses, seen.maxUses);
+      cmp('expires', ent.expires, seen.expires);
+
       return res.status(409).json({
-        error: 'bilet zincirdeki kilitle uyusmuyor — kilitlenen tutarin '
-          + 'verdiginden fazla gecis hakki istenmis olabilir',
+        error: differs.length
+          ? `bilet zincirdeki kilitle uyusmuyor — ${differs.join('; ')}`
+          : 'bilet zincirdeki kilitle uyusmuyor — kilitlenen tutarin '
+            + 'verdiginden fazla gecis hakki istenmis olabilir',
+        mismatch: differs,
       });
     }
 

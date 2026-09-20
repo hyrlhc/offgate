@@ -105,6 +105,19 @@ export async function runTopUp(
   // Secim en basta kesinlesir: sonraki her adim bu kapiya gore sekillenir.
   // Acik bilet varsa kapi zaten zincirde bagli; ek yukleme oraya gider.
   const existing = await accountOf(signer.address);
+
+  // Cihaz anahtari (karar K-1): fisleri cuzdan degil bu anahtar imzalar.
+  const device = loadOrCreateDeviceKey(signer.address);
+
+  // Acik bilette cihaz anahtari zincirde sabittir; `top_up` onu degistirmez.
+  // Tarayici anahtari kaybetmisse (depolama temizlenmis, baska tarayici,
+  // gizli sekme) burada yeni bir anahtar uretilir ve ozet zincirdekiyle
+  // tutmaz — imza ucu hakli olarak reddeder. Bu kontrol olmasaydi kullanici
+  // once parayi kilitler, sonra imzasiz kalirdi. Para hareketinden ONCE.
+  if (existing && toHex(existing.device_pk) !== toHex(device.publicKey)) {
+    throw new Error(t('err.deviceKeyLost'));
+  }
+
   await run('gate', async () => existing?.gate ?? gate,
     (g) => t(existing ? 'det.gateOpen' : 'det.gateUser', { gate: g }));
 
@@ -169,8 +182,6 @@ export async function runTopUp(
     anchorTxId = deposit.id;
   }
 
-  // Cihaz anahtari (karar K-1): fisleri cuzdan degil bu anahtar imzalar.
-  const device = loadOrCreateDeviceKey(signer.address);
   const amountStroops = usdcToStroops(usdcAmount);
   const expires = Math.floor(Date.now() / 1000) + 86_400;
 
@@ -178,6 +189,9 @@ export async function runTopUp(
   // ve kur zincirdeki kayittan gelir — bilet zincirdekiyle birebir tutmali.
   const fareTry = existing ? Number(existing.fare_try) : CONFIG.fareTryKurus;
   const targetGate = existing ? existing.gate : gate;
+  // Etkinlik de zincirden. Kapi ve ucret zaten oradan geliyordu; bunun
+  // istemci ayarindan gelmesi, ayar degistiginde ozeti sessizce kaydiriyordu.
+  const eventId = existing ? existing.event : CONFIG.eventId;
   // Yeni bilette kur, GERCEKLESEN yatirmadan geri hesaplanir; boylece
   // N banknot her zaman tam N gecis eder. Ek yuklemede kur zincirde kilitli
   // kalir — kullanicinin gecis basina odedigi TL degismesin diye.
@@ -200,7 +214,7 @@ export async function runTopUp(
   const entitlement: Entitlement = {
     userRaw: StrKey.decodeEd25519PublicKey(signer.address),
     devicePk: device.publicKey,
-    event: CONFIG.eventId,
+    event: eventId,
     gate: targetGate,
     fareTry,
     rate: lockedRate,
@@ -227,7 +241,16 @@ export async function runTopUp(
       headers: { 'Content-Type': 'application/json' },
       // Profil adi: sunucu hangi DAGITIMA bakacagini bundan anliyor.
       // Sozlesme adresi yine sunucunun kendi tablosundan geliyor.
-      body: JSON.stringify({ user: signer.address, expires, profile: CONFIG.profile }),
+      // `built`: yalnizca teshis icin. Sunucu imzayi bu degerlerden degil,
+      // zincirden kuruyor; ozet tutmazsa hangi alanin kaydigini soyleyebilsin
+      // diye gonderiyoruz.
+      body: JSON.stringify({
+        user: signer.address, expires, profile: CONFIG.profile,
+        built: {
+          devicePk: toHex(device.publicKey), event: eventId, gate: targetGate,
+          fareTry, rate: lockedRate, maxUses, expires,
+        },
+      }),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? `imza ucu HTTP ${res.status}`);
