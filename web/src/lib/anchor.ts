@@ -20,6 +20,9 @@ export type Endpoints = {
 
 /** SEP-1: stellar.toml'dan tum uclari kesfet. */
 export async function discover(homeDomain = CONFIG.anchorHomeDomain): Promise<Endpoints> {
+  // Yedek profilde anchor yoktur; bu fonksiyon oraya hic ugramaz. Yine de
+  // sessizce `null` ile devam etmektense net konusalim.
+  if (!homeDomain) throw new Error('Bu profilde anchor tanımlı değil (yedek mod).');
   const toml = await StellarToml.Resolver.resolve(homeDomain);
   const currency = (toml.CURRENCIES ?? []).find((c) => c.code === CONFIG.usdcCode);
   if (!currency?.issuer) {
@@ -62,7 +65,7 @@ async function asJson(res: Response, what: string) {
 export async function authenticate(ep: Endpoints, signer: Signer): Promise<string> {
   const url = new URL(ep.webAuth);
   url.searchParams.set('account', signer.address);
-  url.searchParams.set('home_domain', CONFIG.anchorHomeDomain);
+  url.searchParams.set('home_domain', CONFIG.anchorHomeDomain ?? '');
 
   const challenge = await asJson(await fetch(url), 'SEP-10 challenge');
   const xdr = challenge.transaction as string;
@@ -222,4 +225,31 @@ export async function waitForCompletion(
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error(`Anchor işlemi ${timeoutMs / 1000}sn içinde tamamlanmadı (son durum: ${last})`);
+}
+
+
+// --- Yedek anchor -----------------------------------------------------------
+//
+// Gercek anchor'in odeme isleyicisi coktugunde (SEP uclari 200 doner ama
+// USDC hic gelmez, islem `pending_anchor`de kalir) demoyu ayakta tutan yol.
+// Anchor taklidi degil: kendi test varligimizi kendi ihraccimizdan
+// gonderiyoruz ve arayuzde "Yedek" diye gorunuyor.
+
+export type FallbackPayout = {
+  hash: string;
+  amount: string;
+  asset: string;
+  rate: string;
+  amountTry: string;
+};
+
+export async function fallbackPayout(account: string, amountTry: string): Promise<FallbackPayout> {
+  const res = await fetch(`${CONFIG.apiBase}/api/fallback-payout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account, amountTry }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `yedek anchor ${res.status}`);
+  return body as FallbackPayout;
 }

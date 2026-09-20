@@ -1,3 +1,5 @@
+import ProfileToggle from './ProfileToggle.tsx';
+
 /** Dort sekme: demo, anlatim, veri tasima, denetim. */
 export default function Nav({ active }: { active: 'demo' | 'nasil' | 'carry' | 'audit' }) {
   return (
@@ -9,7 +11,10 @@ export default function Nav({ active }: { active: 'demo' | 'nasil' | 'carry' | '
         <a href="#tasi" className={active === 'carry' ? 'on' : ''}>Veriyi taşı</a>
         <a href="#audit" className={active === 'audit' ? 'on' : ''}>Denetim</a>
       </div>
-      <span className="nav-tag">testnet</span>
+      <div className="nav-right">
+        <ProfileToggle />
+        <span className="nav-tag">testnet</span>
+      </div>
     </nav>
   );
 }

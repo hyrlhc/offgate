@@ -9,7 +9,7 @@
 
 import { createHash, createPrivateKey, createPublicKey, sign } from 'node:crypto';
 import { Address, BASE_FEE, Contract, StrKey, TransactionBuilder, rpc, scValToNative } from '@stellar/stellar-sdk';
-import { DEPLOYMENT } from '../shared/deployment.js';
+import { DEPLOYMENT, PROFILES, isProfile } from '../shared/deployment.js';
 
 const PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
 const ENT_DOMAIN = Buffer.from('OFFGATE-ENT-v1', 'ascii');
@@ -70,20 +70,32 @@ export function entitlementBytes(e) {
 
 // Varsayilanlar tarayicidakiyle AYNI dosyadan gelir; ikisi ayri yerde
 // tanimli olsaydi sozlesme yeniden dagitildiginda birbirinden kopabilirlerdi.
-const CONTRACT_ID = process.env.VITE_CONTRACT_ID ?? DEPLOYMENT.contractId;
 const RPC_URL = process.env.VITE_RPC_URL ?? DEPLOYMENT.rpcUrl;
 const NETWORK_PASSPHRASE = process.env.VITE_NETWORK_PASSPHRASE ?? DEPLOYMENT.networkPassphrase;
 const READ_ACCOUNT = process.env.VITE_READ_ACCOUNT ?? DEPLOYMENT.readAccount;
+
+/**
+ * Istemci hangi profilde oldugunu soyler; biz yalnizca ADINI kabul ediyoruz.
+ * Sozlesme adresi bizim tablomuzdan geliyor, istemciden degil — aksi halde
+ * kullanici kendi sozlesmesini gosterip istedigi bileti imzalatabilirdi.
+ *
+ * Profil secimi bir yetki degil, yalnizca hangi dagitima bakilacagi.
+ * Her iki profilde de imza zincirdeki kilide karsi dogrulaniyor (karar K-9).
+ */
+function contractFor(profile) {
+  if (process.env.VITE_CONTRACT_ID) return process.env.VITE_CONTRACT_ID;
+  return isProfile(profile) ? PROFILES[profile].contractId : DEPLOYMENT.contractId;
+}
 
 /** En fazla 48 saatlik bilet imzalariz. */
 const MAX_TTL_SECONDS = 48 * 3600;
 
 /** Kullanicinin zincirdeki kilidini okur. Imzasiz, ucretsiz simulasyon. */
-async function readAccountFromChain(user) {
+async function readAccountFromChain(user, contractId) {
   const server = new rpc.Server(RPC_URL);
   const source = await server.getAccount(READ_ACCOUNT);
   const tx = new TransactionBuilder(source, { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE })
-    .addOperation(new Contract(CONTRACT_ID).call('account_of', new Address(user).toScVal()))
+    .addOperation(new Contract(contractId).call('account_of', new Address(user).toScVal()))
     .setTimeout(30)
     .build();
 
@@ -129,7 +141,7 @@ export default async function handler(req, res) {
     // Son adim kritik: urettigimiz ozet, zincirdeki `ent_hash` ile birebir
     // tutmali. Kullanici tarayicida gecis hakkini sisirirse ozet tutmaz ve
     // imza hic verilmez — kapi imzasiz bileti kabul etmez.
-    const acct = await readAccountFromChain(body.user);
+    const acct = await readAccountFromChain(body.user, contractFor(body.profile));
 
     // Gecis hakki da zincirden: `ent_uses`, yururlukteki biletin kontrat
     // tarafindan hesaplanmis hakki. `top_up` bunu, acikta kalan imzali

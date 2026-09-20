@@ -1,7 +1,37 @@
 // Tum degerler VITE_ ile disaridan gecilebilir; varsayilanlar testnet demosu.
 // Burada hicbir gizli anahtar yok — operator imzasi sunucu tarafinda atiliyor.
 
-import { DEPLOYMENT } from '../shared/deployment.js';
+import { DEPLOYMENT, PROFILES, isProfile, type Profile, type ProfileName } from '../shared/deployment.js';
+
+// --- Profil secimi ---------------------------------------------------------
+//
+// `live`  gercek anchor + gercek USDC. Varsayilan ve urunun asil yolu.
+// `local` yedek: anchor'in odeme isleyicisi coktugunde demoyu ayakta tutar.
+//         Kendi test varligini kendi ihraccimizdan dagitir, AYRI bir
+//         sozlesme kullanir. Gercek yolu hic etkilemez.
+//
+// Secim localStorage'da kalir; kullanici sekme degistirince profil
+// degisirse alinan bilet baska bir sozlesmede kalir ve tasima yolu tutmaz.
+
+const PROFILE_KEY = 'offgate.profile';
+
+function readProfile(): Profile {
+  try {
+    const saved = localStorage.getItem(PROFILE_KEY);
+    if (isProfile(saved)) return PROFILES[saved];
+  } catch { /* gizli sekme / depolama kapali — varsayilana dus */ }
+  return DEPLOYMENT;
+}
+
+const ACTIVE: Profile = typeof localStorage === 'undefined' ? DEPLOYMENT : readProfile();
+
+export const activeProfile = () => ACTIVE.profile;
+
+/** Profili degistirir ve sayfayi yeniler: CONFIG modul yuklenirken donuyor. */
+export function setProfile(name: ProfileName) {
+  try { localStorage.setItem(PROFILE_KEY, name); } catch { /* yoksay */ }
+  window.location.reload();
+}
 
 // Vite disinda (tarayicisiz uctan uca testte) `import.meta.env` yoktur;
 // o durumda process.env'e dusuyoruz.
@@ -11,27 +41,30 @@ const env: Record<string, string | undefined> =
   {};
 
 export const CONFIG = {
-  networkPassphrase: env.VITE_NETWORK_PASSPHRASE ?? DEPLOYMENT.networkPassphrase,
-  horizonUrl: env.VITE_HORIZON_URL ?? DEPLOYMENT.horizonUrl,
-  rpcUrl: env.VITE_RPC_URL ?? DEPLOYMENT.rpcUrl,
-  friendbotUrl: env.VITE_FRIENDBOT_URL ?? DEPLOYMENT.friendbotUrl,
+  networkPassphrase: env.VITE_NETWORK_PASSPHRASE ?? ACTIVE.networkPassphrase,
+  horizonUrl: env.VITE_HORIZON_URL ?? ACTIVE.horizonUrl,
+  rpcUrl: env.VITE_RPC_URL ?? ACTIVE.rpcUrl,
+  friendbotUrl: env.VITE_FRIENDBOT_URL ?? ACTIVE.friendbotUrl,
 
-  anchorHomeDomain: env.VITE_ANCHOR_HOME_DOMAIN ?? DEPLOYMENT.anchorHomeDomain,
-  usdcCode: env.VITE_USDC_CODE ?? DEPLOYMENT.usdcCode,
-  usdcIssuer: env.VITE_USDC_ISSUER ?? DEPLOYMENT.usdcIssuer,
+  anchorHomeDomain: env.VITE_ANCHOR_HOME_DOMAIN ?? ACTIVE.anchorHomeDomain,
+  usdcCode: env.VITE_USDC_CODE ?? ACTIVE.usdcCode,
+  usdcIssuer: env.VITE_USDC_ISSUER ?? ACTIVE.usdcIssuer,
 
-  contractId: env.VITE_CONTRACT_ID ?? DEPLOYMENT.contractId,
+  contractId: env.VITE_CONTRACT_ID ?? ACTIVE.contractId,
+
+  /** 'live' = gercek anchor · 'local' = yedek (kendi varligimiz). */
+  profile: ACTIVE.profile,
 
   // Operator imza ucunun koku. Tarayicida bos (ayni origin); tarayicisiz
   // uctan uca testte gelistirme sunucusunun adresi verilir.
   apiBase: env.VITE_API_BASE ?? '',
 
-  readAccount: env.VITE_READ_ACCOUNT ?? DEPLOYMENT.readAccount,
+  readAccount: env.VITE_READ_ACCOUNT ?? ACTIVE.readAccount,
 
   // Demo parametreleri — karar K-3 (docs/OFFGATE-PACKAGES.md)
   // Demo etkinliginde iki fiziksel kapi kayitli: M307 ve M308. Kapiyi
   // kullanici secer; `assign_gate` yalnizca oneri olarak durur.
-  eventId: env.VITE_EVENT_ID ?? DEPLOYMENT.eventId,
+  eventId: env.VITE_EVENT_ID ?? ACTIVE.eventId,
   // Bir gecis = bir banknot. Tutar her zaman gecis sayisi x bu ucret.
   fareTryKurus: Number(env.VITE_FARE_TRY_KURUS ?? 10_000),
   defaultPasses: Number(env.VITE_DEFAULT_PASSES ?? 3),

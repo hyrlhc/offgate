@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import signEntitlement from './api/sign-entitlement.js';
+import fallbackPayout from './api/fallback-payout.js';
 
 /**
  * Gelistirme sunucusunun sunucu tarafi icin gizli degiskenleri yukler.
@@ -31,25 +32,29 @@ function loadServerEnv() {
 loadServerEnv();
 
 /**
- * Gelistirme sirasinda `/api/sign-entitlement` ucunu ayaga kaldirir.
- * Uretimde ayni handler Vercel serverless fonksiyonu olarak calisir.
- * Operator gizli anahtari her iki durumda da yalnizca sunucu tarafinda kalir.
+ * Gelistirme sirasinda sunucu uclarini ayaga kaldirir. Uretimde ayni
+ * handler'lar Vercel serverless fonksiyonu olarak calisir. Gizli anahtarlar
+ * her iki durumda da yalnizca sunucu tarafinda kalir.
  */
 function devApi() {
+  const mount = (server: any, path: string, handler: any) => {
+    server.middlewares.use(path, async (req: any, res: any) => {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c);
+      req.body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+      res.status = (code: number) => { res.statusCode = code; return res; };
+      res.json = (obj: unknown) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(obj));
+      };
+      await handler(req, res);
+    });
+  };
   return {
     name: 'offgate-dev-api',
     configureServer(server: any) {
-      server.middlewares.use('/api/sign-entitlement', async (req: any, res: any) => {
-        const chunks: Buffer[] = [];
-        for await (const c of req) chunks.push(c);
-        req.body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
-        res.status = (code: number) => { res.statusCode = code; return res; };
-        res.json = (obj: unknown) => {
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(obj));
-        };
-        await signEntitlement(req, res);
-      });
+      mount(server, '/api/sign-entitlement', signEntitlement);
+      mount(server, '/api/fallback-payout', fallbackPayout);
     },
   };
 }

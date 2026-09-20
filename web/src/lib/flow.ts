@@ -7,7 +7,8 @@
 import { StrKey } from '@stellar/stellar-sdk';
 import { CONFIG } from '../config.ts';
 import {
-  depositExchange, discover, makeSession, requestQuote, simulateBankTransfer, waitForCompletion,
+  depositExchange, discover, fallbackPayout, makeSession, requestQuote,
+  simulateBankTransfer, waitForCompletion,
 } from './anchor.ts';
 import {
   accountOf, contractErrorMessage, ensureTrustline, fareInStroops, grossWithFee,
@@ -102,38 +103,69 @@ export async function runTopUp(
   await run('gate', async () => existing?.gate ?? gate,
     (g) => (existing ? `${g} — açık bilet bu kapıda` : `${g} — kullanıcı seçti`));
 
-  const endpoints = await discover();
-  const session = makeSession(endpoints, signer);
+  // --- Para girisi -------------------------------------------------------
+  //
+  // Iki yol var ve AYRIKLAR. `live` profilinde gercek anchor uzerinden
+  // SEP-10/38/6; urunun asil entegrasyonu budur ve varsayilandir.
+  //
+  // `local` profilinde anchor hic devrede degil: kendi test varligimizi
+  // kendi ihraccimizdan dogrudan gonderiyoruz. Bu yol yalnizca anchor'in
+  // odeme isleyicisi coktugunde demoyu ayakta tutmak icin var — anchor'in
+  // SEP uclari 200 donerken USDC hic odenmeyebiliyor (`pending_anchor`).
+  // Kullaniciya da "Yedek" diye gosteriliyor, gercekmis gibi sunulmuyor.
+  let usdcAmount: string;
+  let anchorTxId: string;
+  let bankReference: string | undefined;
 
-  await run('trustline', async () => ensureTrustline(signer), (created) =>
-    created ? 'yeni güven hattı açıldı' : 'zaten açıktı');
+  if (CONFIG.profile === 'local') {
+    await run('trustline', async () => ensureTrustline(signer), (created) =>
+      created ? `yeni ${CONFIG.usdcCode} güven hattı açıldı` : 'zaten açıktı');
 
-  await run('auth', async () => session.ensure(), () => 'şifre yok, cüzdan imzası');
+    const paid = await run('settled', () => fallbackPayout(signer.address, amountTry),
+      (p) => `${p.amount} ${p.asset} · yedek anchor`);
 
-  const quote = await run('quote', () => requestQuote(session, endpoints, amountTry),
-    (q) => `1 USDC = ${Number(q.total_price).toFixed(6)} TRY`);
+    // Anchor'a ait adimlar bu profilde calismiyor; ekranda oyle gorunsun.
+    for (const id of ['auth', 'quote', 'deposit', 'bank'] as StepId[]) {
+      emit(id, 'tamam', 'yedek modda atlandı');
+    }
+    usdcAmount = paid.amount;
+    anchorTxId = paid.hash;
+  } else {
+    const endpoints = await discover();
+    const session = makeSession(endpoints, signer);
 
-  const deposit = await run('deposit',
-    () => depositExchange(session, endpoints, {
-      account: signer.address, quoteId: quote.id, amountTry,
-    }),
-    (d) => {
-      const ref = d.instructions?.external_transfer_memo?.value;
-      return ref ? `referans ${ref}` : `emir ${d.id.slice(0, 12)}…`;
-    });
+    await run('trustline', async () => ensureTrustline(signer), (created) =>
+      created ? 'yeni güven hattı açıldı' : 'zaten açıktı');
 
-  const bankReference = deposit.instructions?.external_transfer_memo?.value;
+    await run('auth', async () => session.ensure(), () => 'şifre yok, cüzdan imzası');
 
-  await run('bank', () => simulateBankTransfer(session, endpoints, deposit.id, amountTry),
-    () => 'mock anchor: simulate-bank-transfer');
+    const quote = await run('quote', () => requestQuote(session, endpoints, amountTry),
+      (q) => `1 USDC = ${Number(q.total_price).toFixed(6)} TRY`);
 
-  const anchorTx = await run('settled',
-    () => waitForCompletion(session, endpoints, deposit.id),
-    (t) => `${t.amount_out ?? '?'} USDC`);
+    const deposit = await run('deposit',
+      () => depositExchange(session, endpoints, {
+        account: signer.address, quoteId: quote.id, amountTry,
+      }),
+      (d) => {
+        const ref = d.instructions?.external_transfer_memo?.value;
+        return ref ? `referans ${ref}` : `emir ${d.id.slice(0, 12)}…`;
+      });
+
+    bankReference = deposit.instructions?.external_transfer_memo?.value;
+
+    await run('bank', () => simulateBankTransfer(session, endpoints, deposit.id, amountTry),
+      () => 'mock anchor: simulate-bank-transfer');
+
+    const anchorTx = await run('settled',
+      () => waitForCompletion(session, endpoints, deposit.id),
+      (t) => `${t.amount_out ?? '?'} USDC`);
+
+    usdcAmount = anchorTx.amount_out ?? '0';
+    anchorTxId = deposit.id;
+  }
 
   // Cihaz anahtari (karar K-1): fisleri cuzdan degil bu anahtar imzalar.
   const device = loadOrCreateDeviceKey(signer.address);
-  const usdcAmount = anchorTx.amount_out ?? '0';
   const amountStroops = usdcToStroops(usdcAmount);
   const expires = Math.floor(Date.now() / 1000) + 86_400;
 
@@ -188,7 +220,9 @@ export async function runTopUp(
     const res = await fetch(`${CONFIG.apiBase}/api/sign-entitlement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: signer.address, expires }),
+      // Profil adi: sunucu hangi DAGITIMA bakacagini bundan anliyor.
+      // Sozlesme adresi yine sunucunun kendi tablosundan geliyor.
+      body: JSON.stringify({ user: signer.address, expires, profile: CONFIG.profile }),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? `imza ucu HTTP ${res.status}`);
@@ -220,7 +254,7 @@ export async function runTopUp(
     bundle,
     bundleText: encodeBundle(bundle),
     lockHash: lock.hash,
-    anchorTxId: deposit.id,
+    anchorTxId,
     depositTry: amountTry,
     usdcReceived: usdcAmount,
     bankReference,
