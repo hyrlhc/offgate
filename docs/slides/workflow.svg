@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="800" viewBox="0 0 1640 800" font-family="Georgia, 'Times New Roman', serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#C9A227"/>
+    </marker>
+    <style>
+      .h    { fill:#F5E7C6; font-size:30px; font-weight:bold; letter-spacing:.5px; }
+      .tag  { fill:#C9A227; font-size:17px; letter-spacing:2.5px; }
+      .line { fill:#EADFC4; font-size:21px; }
+      .dim  { fill:#9C8D6F; font-size:18px; }
+      .key  { fill:#C9A227; font-size:18px; font-style:italic; }
+      .hash { fill:#C9A227; font-size:23px; font-weight:bold; letter-spacing:1px; }
+      .flow { fill:#C9A227; font-size:17px; font-style:italic; }
+      .box  { fill:none; stroke:#5F5540; stroke-width:1.4; }
+      .band   { fill:none; stroke:#C9A227; stroke-width:1.4; stroke-dasharray:5 5; }
+      .thread { stroke:#C9A227; stroke-width:2; stroke-dasharray:4 5; }
+    </style>
+  </defs>
+
+  <text x="60" y="58" class="h">How one ticket travels</text>
+
+  <!-- 1 -->
+  <rect x="60"  y="96" width="470" height="404" rx="12" class="box"/>
+  <text x="90"  y="140" class="tag">1 . ONLINE</text>
+  <text x="90"  y="176" class="line" font-weight="bold">Phone and web</text>
+  <text x="90"  y="232" class="line">Ticket fields become</text>
+  <text x="90"  y="262" class="line">138 fixed bytes</text>
+  <text x="90"  y="312" class="line">SHA-256 of those bytes</text>
+  <text x="90"  y="342" class="hash">= ent_hash</text>
+  <text x="90"  y="392" class="line">Locked on chain</text>
+  <text x="90"  y="418" class="key">user's wallet key signs</text>
+  <text x="90"  y="462" class="line">Operator signs the bytes</text>
+
+  <!-- 2 -->
+  <rect x="585" y="96" width="470" height="404" rx="12" class="box"/>
+  <text x="615" y="140" class="tag">2 . OFFLINE</text>
+  <text x="615" y="176" class="line" font-weight="bold">ESP32 at the gate</text>
+  <text x="615" y="232" class="line">Verifies operator signature</text>
+  <text x="615" y="258" class="key">public key burned in</text>
+  <text x="615" y="308" class="line">Recomputes ent_hash</text>
+  <text x="615" y="334" class="dim">does not trust the one sent</text>
+  <text x="615" y="384" class="line">Checks receipt and ledger</text>
+  <text x="615" y="410" class="key">device key . spent list</text>
+  <text x="615" y="462" class="line">Opens, then signs the amount</text>
+
+  <!-- 3 -->
+  <rect x="1110" y="96" width="470" height="404" rx="12" class="box"/>
+  <text x="1140" y="140" class="tag">3 . ONLINE AGAIN</text>
+  <text x="1140" y="176" class="line" font-weight="bold">Anyone can carry it</text>
+  <text x="1140" y="232" class="line">User submits the gate's</text>
+  <text x="1140" y="262" class="line">signed record</text>
+  <text x="1140" y="312" class="line">Contract matches ent_hash</text>
+  <text x="1140" y="338" class="key">against the chain</text>
+  <text x="1140" y="388" class="line">Operator is paid</text>
+  <text x="1140" y="438" class="line">Fee returns to the carrier</text>
+  <text x="1140" y="464" class="key">80 percent back</text>
+
+  <!-- arrows -->
+  <line x1="532" y1="300" x2="580" y2="300" stroke="#C9A227" stroke-width="3" marker-end="url(#a)"/>
+  <text x="556" y="545" class="flow" text-anchor="middle">signed package</text>
+  <text x="556" y="570" class="flow" text-anchor="middle">no secret key inside</text>
+
+  <line x1="1057" y1="300" x2="1105" y2="300" stroke="#C9A227" stroke-width="3" marker-end="url(#a)"/>
+  <text x="1081" y="545" class="flow" text-anchor="middle">signed receipt</text>
+  <text x="1081" y="570" class="flow" text-anchor="middle">and the amount taken</text>
+
+  <!-- ent_hash ipligi: her panelden asagi inip bandi besliyor -->
+  <line x1="295" y1="500" x2="295" y2="622" class="thread"/>
+  <circle cx="295" cy="622" r="6" fill="#C9A227"/>
+  <line x1="820" y1="500" x2="820" y2="622" class="thread"/>
+  <circle cx="820" cy="622" r="6" fill="#C9A227"/>
+  <line x1="1345" y1="500" x2="1345" y2="622" class="thread"/>
+  <circle cx="1345" cy="622" r="6" fill="#C9A227"/>
+  <line x1="295" y1="622" x2="1345" y2="622" stroke="#C9A227" stroke-width="2"/>
+
+  <!-- hash thread -->
+  <rect x="60" y="646" width="1520" height="106" rx="12" class="band"/>
+  <text x="90" y="692" class="hash">ent_hash . the same 32 bytes in all three places</text>
+  <text x="90" y="728" class="line">On chain under the user's signature  .  inside what the operator signed  .  inside every receipt</text>
+</svg>
