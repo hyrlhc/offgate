@@ -115,6 +115,144 @@ yazar ve fiş imzalama yetkisini ona devreder. Cüzdanın kendi anahtarı telefo
 
 ---
 
+## İmzalar birbirine nasıl bağlanıyor
+
+Bir değerlendiricinin mantık hatası arayacağı yer burasıdır, bu yüzden adım adım
+yazıldı. Önce sık yapılan bir varsayımı düzeltmek gerekiyor: bir Soroban
+sözleşmesi hiçbir şey imzalayamaz. İçinde gizli anahtar yoktur. Sözleşmenin
+yaptığı şey bir özeti *taahhüt etmektir*; operatör de yalnızca zincirin zaten
+taahhüt ettiği belgeyi imzalar.
+
+### Adım 1. Kullanıcı bilet özetini zincire taahhüt eder
+
+Tarayıcı bileti kurar: kullanıcının açık anahtarı, cihazın açık anahtarı,
+etkinlik, seçilen kapı, geçiş ücreti, kilitlenen kur, geçiş sayısı ve son
+kullanma zamanı. Bunlar sabit 138 bayt olarak dizilir ve SHA-256 ile hashlenir.
+
+`lock_float` bu özetle çağrılır; kapı, ücret, kur ve cihaz anahtarı ayrı
+argümanlar olarak gider. Çağrı `require_auth` taşır, yani kullanıcının kendi
+cüzdan imzası onu yetkilendirir. Sözleşme USDC'yi içeri alır ve hepsini saklar.
+
+Bu noktada zincirde bir taahhüt vardır: *bu cüzdan şu kadarını, şu kapı için, şu
+kurdan kilitledi ve kullanmayı düşündüğü biletin özeti şu değerdir.*
+
+### Adım 2. Operatör yalnızca zincirin taahhüt ettiğini imzalar
+
+Operatör ucu, istemcinin gönderdiği hiçbir şeyi dikkate almaz; yalnızca cüzdan
+adresini ve istenen süreyi alır. Hesabı sözleşmeden geri okur, 138 baytı
+**zincirdeki değerlerden** yeniden kurar ve hashler.
+
+Bu hash zincirde saklanan `ent_hash` ile eşit değilse HTTP 409 ile reddeder ve
+hiçbir şey imzalamaz.
+
+Eşitse, o 138 baytı operatörün Ed25519 anahtarıyla imzalar.
+
+Bu sıra, işin en bariz açığını kapatan şeydir. Önceki bir sürümde operatör
+istemcinin gönderdiğini sorgusuz imzalıyordu; tarayıcıda `max_uses` değerini
+değiştiren bir kullanıcı 999 geçişlik imza alabilirdi. Artık geçiş hakkını
+sözleşme kilitli bakiyeden hesaplıyor ve imza yalnızca zincirin zaten kabul
+ettiği baytlar üzerine atılıyor.
+
+### Adım 3. Kapı operatör imzasını çevrimdışı doğrular
+
+Firmware'e operatörün açık anahtarı derlenerek gömülmüştür. Açık anahtar olduğu
+için flash'ı okumak işe yarar hiçbir şey vermez.
+
+Kapı, paketteki alanlardan aynı 138 baytı yeniden kurar ve operatörün imzasını
+bunlara karşı doğrular. Tek bir alan yolda değiştirilmişse baytlar farklı olur ve
+imza tutmaz.
+
+Ardından `ent_hash = SHA-256(bu baytlar)` değerini kendisi hesaplar. Paketten
+gelen hash'e güvenmez; kendisi türetir.
+
+Sözleşme ayrıca operatörün açık anahtarını `operator_pk()` ile yayımlar; böylece
+bir kapıya gömülü anahtarın, sözleşmenin beyan ettiği anahtar olduğu herkesçe
+kontrol edilebilir. Kapının doğrulama yapmak için zincire ihtiyacı yoktur, ama
+bir denetçi kapıyı zincir üzerinden doğrulayabilir.
+
+### Adım 4. Kapı kullanıcının fişini doğrular
+
+Fiş sabit 67 bayttır: sürüm öneki, `ent_hash`, sıra numarası, ücret ve zaman
+damgası. Cihaz anahtarıyla imzalanmıştır.
+
+İki kontrol onu bağlar:
+
+- Fişteki `ent_hash`, kapının az önce türettiğiyle aynı olmak zorundadır. Bir fiş böylece tam olarak tek bir bilete aittir.
+- İmza, **operatörün imzaladığı biletin içindeki** cihaz açık anahtarına karşı doğrulanmak zorundadır. Cihaz anahtarı fişten ya da kullanıcının ayrıca değiştirebileceği bir alandan alınmaz; operatörün imzaladığı baytların içinde taşınır.
+
+Sonra sıra numarası hak sınırına karşı, `(ent_hash, seq)` çifti de kapının kendi
+harcanmış fiş defterine karşı kontrol edilir.
+
+### Adım 5. Kapı fiilen tahsil ettiğini imzalar
+
+Kabulden sonra kapı, aynı `ent_hash` ve sıra numarasını ve aldığı tutarı
+adlandıran 67 baytlık bir belge imzalar. Bunu ilk açılışta ürettiği ve cihazdan
+hiç çıkmayan kendi anahtarıyla yapar. Açık tarafı `register_gate` ile zincire
+kayıtlıdır.
+
+### Adım 6. Sözleşme senkronizasyonda her şeyi yeniden kontrol eder
+
+`settle` kimsenin sözüne güvenmez:
+
+- Gönderen kapı, biletin ait olduğu etkinliğe kayıtlı olmak zorundadır.
+- Zincirdeki `acct.ent_hash`, fişin `ent_hash` değerine eşit olmak zorundadır. Operatör imzasının yeniden doğrulanmasının yerini bu alır: özet, Adım 1'de kullanıcının kendi yetkisiyle taahhüt edilmişti, dolayısıyla eşleşmeyi kontrol etmek eşdeğer ve daha ucuzdur.
+- Fiş imzası, gönderilen veriden değil zincirden okunan `acct.device_pk` değerine karşı doğrulanır.
+- Belge imzası, zincire kayıtlı kapı açık anahtarına karşı doğrulanır.
+- Tahsil edilen tutar, kullanıcının imzaladığı ücreti aşamaz.
+- `(ent_hash, seq)` zincirde zaten harcanmış işaretli olmamalıdır.
+
+Ancak bunların hepsi geçerse para hareket eder.
+
+### Kapının çevrimdışı bilebildiği ve bilemediği
+
+Bu ayrım önemli; üstünü örtmek asıl mantık açığı olurdu.
+
+Kapı zincirle hiç temas etmez. Operatör imzasını doğruladığında öğrendiği tek
+şey şudur: *operatör bu baytlara kefil oldu*. Zincirin o baytları taahhüt edip
+etmediğini öğrenmez, çevrimdışı öğrenemez de. Bağlantısı olmayan bir zinciri
+senkronize etmeden kontrol edebileceği bir defter kanıtı yoktur.
+
+Zincire bağ bunun yerine başka iki noktada zorlanır.
+
+**İmza anında, kural olarak.** Operatör ucu bileti zincirdeki değerlerden
+yeniden kurar ve taahhüt edilen özetle eşleşmeyen hiçbir şeyi imzalamaz. Bu,
+operatörün uyduğu bir kuraldır; kapının doğruladığı bir şey değildir.
+
+**Senkronizasyonda, sözleşme tarafından.** `settle`, zincirden `acct.ent_hash`
+değerini okur ve eşleşmeyen hiçbir fişi kabul etmez. Arkasında zincirde kilit
+olmayan bir bilet hiçbir zaman settle edilemez.
+
+Asıl açıkça söylenmesi gereken sonuç şu: operatör anahtarı, arkasında kilitli
+bakiye olmayan bir bileti imzalamak için kötüye kullanılsaydı, kapılar açılır ama
+operatör senkronizasyonda hiçbir şey alamazdı, çünkü düşülecek bir hesap
+olmazdı. Bu sahteciliği yapabilecek tek taraf, yaptığında para kaybeden taraftır.
+
+Bir denetçi döngüyü dışarıdan kapatabilir. `operator_pk()` operatörün açık
+anahtarını zincirde yayımlar; böylece bir kapıya derlenmiş anahtar, sözleşmenin
+beyan ettiğiyle karşılaştırılabilir. `account_of(user)` taahhüt edilen özeti
+döndürür; böylece düzenlenmiş her bilet yeniden hesaplanıp kontrol edilebilir.
+
+Dürüst özet şudur: çevrimdışında kapı tek bir imzaya güvenir. Zincirde bu güvenin
+sınırı vardır — operatör bir kapıyı ödemesiz açtırabilir, ama kendisine ödeme
+yaptıramaz ve bunu fark edilmeden yapamaz.
+
+### Bir değerlendiricinin açık arayacağı yerler
+
+| Soru | Cevap |
+|---|---|
+| Kullanıcı sahte bilet üretebilir mi? | Operatörün gizli anahtarı gerekir. O anahtar sunucuda durur ve tarayıcıya hiç gönderilmez. |
+| Kullanıcı geçiş sayısını şişirebilir mi? | Geçiş hakkını sözleşme kilitli bakiyeden hesaplar. Operatör bileti zincirdeki değerlerden yeniden kurar ve başka bir şeyi imzalamayı reddeder. |
+| Kullanıcı ücreti ya da kapıyı değiştirebilir mi? | İkisi de imzalanan 138 baytın içindedir. Birini değiştirmek operatör imzasını geçersiz kılar. |
+| Kullanıcı fişi tekrar kullanabilir mi? | `seq` imzalanan baytların içindedir ve `(ent_hash, seq)` hem kapı defterine hem zincire yazılır. |
+| Kullanıcı başka bir cihaz anahtarı koyabilir mi? | Cihaz anahtarı operatörün imzaladığı biletin içindedir ve ayrıca `lock_float` tarafından zincire yazılır. |
+| Kapıdan anahtar çıkarılabilir mi? | Kapıda operatörün açık anahtarı ve kapının kendi anahtarı vardır. Operatör anahtarı zaten açıktır. Kapı anahtarı yalnızca o kapının ne tahsil ettiğine dair beyan imzalayabilir ve `set_gate_pk` ile döndürülebilir. |
+| Kapı fazla tahsil edebilir mi? | Üst sınır kullanıcının imzasındadır ve sözleşme bunun üstündeki belgeyi reddeder. |
+| Kapı eksik beyan edebilir mi? | Edebilir, ama tutarı operatör alır; eksik beyan yalnızca kendi operatörüne zarar verir. |
+| Operatör hasılatı gizleyebilir mi? | Kapı kendi sayaç beyanını kendisi imzalar. `stats` bu sayıyı fiilen settle edilen fişlerin yanına koyar; operatör birincisini yazamaz. |
+| Çalınmış bir paket kullanılabilir mi? | Evet. Bu tek açık zayıflıktır ve aşağıdaki güvenlik bölümünde belirtilmiştir. |
+
+---
+
 ## Akış
 
 ### Bilet alma, çevrimiçi

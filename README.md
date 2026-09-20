@@ -116,6 +116,148 @@ offline side of the phone.
 
 ---
 
+## How the signatures chain together
+
+This is the part a reviewer will want to check for a logical gap, so it is
+written out step by step. One clarification first, because it is a common
+assumption: a Soroban contract cannot sign anything. It holds no private key.
+What the contract does is *commit* a digest, and the operator will only sign a
+document that matches what the chain already committed.
+
+### Step 1. The user commits the ticket digest on chain
+
+The browser builds the entitlement: the user's public key, the device public
+key, the event, the chosen gate, the fare, the locked rate, the number of passes
+and the expiry. These are laid out as 138 fixed bytes and hashed with SHA-256.
+
+`lock_float` is called with that digest, together with the gate, fare, rate and
+device key as separate arguments. The call carries `require_auth`, so the user's
+own wallet signature authorises it. The contract moves the USDC in and stores
+all of it.
+
+At this point the chain holds a commitment: *this wallet locked this much, for
+this gate, at this rate, and the ticket it intends to use hashes to this value.*
+
+### Step 2. The operator signs only what the chain already committed
+
+The operator endpoint ignores everything the client sends except the wallet
+address and the requested expiry. It reads the account back from the contract,
+rebuilds the 138 bytes **from the on-chain values**, and hashes them.
+
+If that hash does not equal the `ent_hash` stored on chain, it refuses with HTTP
+409 and signs nothing.
+
+If it matches, it signs those 138 bytes with the operator's Ed25519 key.
+
+This ordering is what closes the obvious hole. In an earlier version the
+operator signed whatever the client sent, so a user editing `max_uses` in the
+browser would have received a signature for 999 passes. Now the allowance is
+computed by the contract from the locked balance, and the signature is only ever
+issued over bytes the chain already agreed to.
+
+### Step 3. The gate verifies the operator signature, offline
+
+The firmware has the operator's public key compiled into it. It is a public key,
+so reading the flash reveals nothing useful.
+
+The gate rebuilds the same 138 bytes from the fields in the bundle and verifies
+the operator's signature over them. If a single field was altered in transit,
+the bytes differ and the signature fails.
+
+It then computes `ent_hash = SHA-256(those bytes)` itself. It does not trust the
+hash from the bundle; it derives it.
+
+The contract also publishes the operator public key through `operator_pk()`, so
+anyone can check that the key burned into a gate is the key the contract
+declares. The gate does not need the chain to verify, but an auditor can use the
+chain to verify the gate.
+
+### Step 4. The gate verifies the user's receipt
+
+The receipt is 67 fixed bytes: a version prefix, the `ent_hash`, the sequence
+number, the fare and a timestamp. It is signed by the device key.
+
+Two checks bind it:
+
+- The `ent_hash` in the receipt must equal the one the gate just derived. A receipt therefore belongs to exactly one entitlement.
+- The signature must verify against the device public key **that is inside the operator-signed entitlement**. The device key is not taken from the receipt or from any field the user could edit independently; it is carried inside bytes the operator signed.
+
+Then the sequence number is checked against the allowance, and the pair
+`(ent_hash, seq)` is checked against the gate's own ledger of spent receipts.
+
+### Step 5. The gate signs what it actually charged
+
+After accepting, the gate signs a 67-byte voucher naming the same `ent_hash` and
+sequence number and the amount it took. It uses its own key, generated on first
+boot and never leaving the device. The public half is registered on chain
+through `register_gate`.
+
+### Step 6. The contract re-checks everything at settlement
+
+`settle` does not take anyone's word for it:
+
+- The gate that submitted must be registered to the same event as the ticket.
+- `acct.ent_hash` on chain must equal the receipt's `ent_hash`. This is what replaces re-verifying the operator signature: the digest was committed in step 1 under the user's own authorisation, so matching it is equivalent and cheaper.
+- The receipt signature is verified against `acct.device_pk`, read from the chain, not from the submission.
+- The voucher signature is verified against the gate public key registered on chain.
+- The charged amount must not exceed the fare the user signed for.
+- `(ent_hash, seq)` must not already be marked spent on chain.
+
+Only then does the money move.
+
+### What the gate can and cannot know offline
+
+This distinction matters, and glossing over it would be the real logical gap.
+
+The gate never contacts the chain. When it verifies the operator signature, it
+learns exactly one thing: *the operator vouched for these bytes*. It does not
+learn, and cannot learn offline, that the chain ever committed them. There is no
+ledger proof it could check without synchronising a chain it has no connection
+to.
+
+The link to the chain is enforced at two other points instead.
+
+**By policy, at signing time.** The operator endpoint rebuilds the entitlement
+from on-chain values and refuses to sign anything that does not match the
+committed digest. This is a rule the operator follows, not something the gate
+verifies.
+
+**By the contract, at settlement.** `settle` reads `acct.ent_hash` from the
+chain and refuses any receipt that does not match. A ticket with no on-chain
+lock behind it can never be settled.
+
+The consequence is the part worth stating plainly. If the operator key were
+misused to sign an entitlement with no locked balance behind it, gates would
+open and the operator would receive nothing at settlement, because there would
+be no account to deduct from. The only party capable of that forgery is the one
+who loses money by committing it.
+
+An auditor can close the loop from outside. `operator_pk()` publishes the
+operator public key on chain, so the key compiled into a gate can be compared
+against what the contract declares. `account_of(user)` returns the committed
+digest, so any issued ticket can be recomputed and checked.
+
+So the honest summary is this. Offline, the gate trusts one signature. On chain,
+that trust is bounded: the operator can cause a gate to open without payment,
+but cannot cause itself to be paid, and cannot do so undetectably.
+
+### Where a reviewer would look for a gap
+
+| Question | Answer |
+|---|---|
+| Can a user forge a ticket? | They would need the operator's private key. It is on the server and never sent to the browser. |
+| Can a user inflate their pass count? | The allowance is computed by the contract from the locked balance. The operator rebuilds the entitlement from chain values and refuses to sign anything else. |
+| Can a user edit the fare or the gate? | Both are inside the 138 signed bytes. Changing either invalidates the operator signature. |
+| Can a user reuse a receipt? | `seq` is inside the signed bytes, and `(ent_hash, seq)` is recorded in the gate ledger and again on chain. |
+| Can a user swap in a different device key? | The device key lives inside the operator-signed entitlement and is also stored on chain by `lock_float`. |
+| Can someone extract keys from a gate? | The gate holds the operator's public key and its own key. The operator key is public. The gate key can only sign statements about what that gate collected, and it is rotatable through `set_gate_pk`. |
+| Can a gate overcharge? | The ceiling is in the user's signature and the contract rejects a voucher above it. |
+| Can a gate under-report? | It could, but the operator receives the amount, so a gate under-reporting only costs its own operator. |
+| Can the operator hide revenue? | The gate signs its own counter declaration. `stats` puts that number next to the receipts actually settled; the operator cannot write the first one. |
+| Can a stolen bundle be used? | Yes. This is the one open weakness and it is stated in the security section below. |
+
+---
+
 ## Flow
 
 ### Buying a ticket, online
