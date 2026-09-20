@@ -11,7 +11,7 @@
 // Sozlesme yeniden dagitilinca DEGISECEK TEK SATIR asagidaki CONTRACT_ID.
 
 export const DEPLOYMENT = {
-  contractId: 'CCXEH644FOYINJERTUOD7TFWKNJNHHL252E3KGTEQQU47476M7KXWPLX',
+  contractId: 'CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH',
   eventId: 'FEST26',
 
   networkPassphrase: 'Test SDF Network ; September 2015',

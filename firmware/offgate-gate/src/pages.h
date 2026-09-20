@@ -48,13 +48,37 @@ button.go:disabled{opacity:.4}
   <textarea id="inp" placeholder="offgate bileti..."></textarea>
   <button id="load" style="margin-top:10px">Bileti yukle</button>
 </div>
+<div class="card" id="carrybox" hidden>
+  <b>Yaninda goturecegin veri</b>
+  <p class="mut">Bu kapinin imzaladigi <b id="cn">0</b> gecis kaydi. Internete
+  cikinca uygulamaya yapistir: <b>para ustun</b> ve <b>hizmet bedelinin %80'i</b>
+  cuzdanina geri doner. Kapinin verisini zincire tasidigin icin.</p>
+  <textarea id="carry" readonly></textarea>
+  <button id="copy" style="margin-top:10px">Kopyala</button>
+</div>
 <button id="forget" style="margin-top:6px;background:transparent">Bileti unut</button>
 <script>
-var K='offgate.bundle', B=null;
+var K='offgate.bundle', C='offgate.carry', B=null;
 function $(i){return document.getElementById(i)}
 function show(msg,ok){$('res').innerHTML='<div class="res '+(ok?'ok':'no')+'">'+msg+'</div>'}
 function fmt(k){return (k/100).toLocaleString('tr-TR',{minimumFractionDigits:2})+' TL'}
+/** Kapinin imzaladigi belgeyi sakla — kullanici bunu zincire tasiyacak. */
+function keep(rec){
+  var a=[];try{a=JSON.parse(localStorage.getItem(C))||[]}catch(e){}
+  for(var i=0;i<a.length;i++)if(a[i].ent_hash==rec.ent_hash&&a[i].seq==rec.seq)return;
+  a.push(rec);
+  try{localStorage.setItem(C,JSON.stringify(a))}catch(e){}
+  renderCarry();
+}
+function renderCarry(){
+  var a=[];try{a=JSON.parse(localStorage.getItem(C))||[]}catch(e){}
+  if(!a.length){$('carrybox').hidden=true;return}
+  $('carrybox').hidden=false;$('cn').textContent=a.length;
+  var s=btoa(unescape(encodeURIComponent(JSON.stringify({v:1,receipts:a}))));
+  $('carry').value=s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
 function render(){
+  renderCarry();
   if(!B){$('paste').hidden=false;$('go').hidden=true;$('ticket').hidden=true;$('forget').hidden=true;return}
   $('paste').hidden=true;$('go').hidden=false;$('ticket').hidden=false;$('forget').hidden=false;
   $('gate').textContent=B.gate;$('fare').textContent=fmt(B.fare_try);
@@ -74,6 +98,11 @@ function load(text){
 }
 $('load').onclick=function(){load($('inp').value)};
 $('forget').onclick=function(){localStorage.removeItem(K);B=null;render();$('res').innerHTML=''};
+$('copy').onclick=function(){
+  var t=$('carry');t.select();t.setSelectionRange(0,99999);
+  try{document.execCommand('copy');show('Veri kopyalandi &mdash; internete cikinca uygulamaya yapistir',1)}
+  catch(e){show('Metni elle secip kopyala',0)}
+};
 $('go').onclick=function(){
   var used=B.used||0, r=B.receipts[used];
   if(!r){show('Hak bitti',0);return}
@@ -85,7 +114,14 @@ $('go').onclick=function(){
     receipt:{ent_hash:r.ent_hash,user:B.user,seq:r.seq,fare_try:Number(r.fare_try),ts:r.ts,sig:r.sig}
   })}).then(function(x){return x.json()}).then(function(j){
     $('go').textContent='GEC';
-    if(j.ok){B.used=r.seq;localStorage.setItem(K,JSON.stringify(B));show('GECEBILIRSIN',1)}
+    if(j.ok){
+      B.used=r.seq;localStorage.setItem(K,JSON.stringify(B));
+      // Kapinin imzaladigi tahsilat belgesini yanimiza aliyoruz.
+      if(j.receipt)keep(j.receipt);
+      var m='GECEBILIRSIN';
+      if(j.change_try>0)m+=' &middot; ucret '+fmt(j.charged_try)+', para ustu '+fmt(j.change_try);
+      show(m,1);
+    }
     else{show(j.message||'REDDEDILDI',0); if(j.reason=='already_spent'&&B.used<r.seq){B.used=r.seq;localStorage.setItem(K,JSON.stringify(B))}}
     render();
   }).catch(function(){$('go').textContent='GEC';$('go').disabled=false;show('Kapiya ulasilamadi',0)});

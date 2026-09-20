@@ -186,6 +186,8 @@ export type ChainAccount = {
   balance: bigint; locked: bigint; event: string; gate: string;
   fare_try: bigint; rate: bigint; device_pk: Uint8Array; ent_hash: Uint8Array;
   granted: number; used: number; ent_uses: number;
+  /** Alinan ama henuz iade edilmemis hizmet bedeli, stroop. */
+  fee_held: bigint;
 };
 
 export async function accountOf(user: string): Promise<ChainAccount | null> {
@@ -244,9 +246,100 @@ export function lockFloat(
 export const refund = (signer: Signer) =>
   invokeContract(signer, 'refund', [addressArg(signer.address)]);
 
+/** Su anda `refund` cagrilsa ne kadar geri gelir (acik haklar rezerve). */
+export const refundableOf = (user: string) =>
+  readContract<bigint>('refundable_of', [addressArg(user)], user);
+
+// --- Kapinin imzaladigi tahsilat belgesi ------------------------------------
+
+/**
+ * Kapinin `/pay` yanitinda verdigi kayit. Kullanici bunu yaninda tasiyip
+ * zincire yaziyor; karsiliginda para ustu ve hizmet bedelinin %80'i geri
+ * geliyor.
+ */
+export type CarriedReceipt = {
+  ent_hash: string;
+  user: string;
+  seq: number;
+  fare_try: string;
+  ts: number;
+  sig: string;
+  gate: string;
+  charged_try: string;
+  gate_sig: string;
+};
+
+/**
+ * `Receipt` struct'ini ScVal'e cevirir.
+ *
+ * Elle kuruyoruz cunku `nativeToScVal` bir nesnenin anahtarlarini `scvString`
+ * yapiyor; Soroban struct'lari ise `scvSymbol` anahtar bekliyor ve string
+ * anahtarli map'i reddediyor. Ayrica ScMap anahtarlari SIRALI olmak zorunda.
+ */
+function receiptArg(r: CarriedReceipt): xdr.ScVal {
+  const fields: Array<[string, xdr.ScVal]> = [
+    ['charged_try', i128Arg(r.charged_try)],
+    ['ent_hash', bytesArg(r.ent_hash)],
+    ['fare_try', i128Arg(r.fare_try)],
+    ['gate_sig', bytesArg(r.gate_sig)],
+    ['seq', nativeToScVal(r.seq, { type: 'u32' })],
+    ['sig', bytesArg(r.sig)],
+    ['ts', nativeToScVal(BigInt(r.ts), { type: 'u64' })],
+    ['user', addressArg(r.user)],
+  ];
+  fields.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return xdr.ScVal.scvMap(
+    fields.map(([name, val]) =>
+      new xdr.ScMapEntry({ key: nativeToScVal(name, { type: 'symbol' }), val }),
+    ),
+  );
+}
+
+/**
+ * Fisleri zincire yazar. **Izin gerektirmez** — imzayi kapi ve kullanici
+ * attigi icin veriyi kimin tasidiginin onemi yok. Cagiran taraf yalnizca
+ * islem ucretini oder (~0.00001 XLM).
+ */
+export function settle(signer: Signer, gate: string, receipts: CarriedReceipt[]) {
+  return invokeContract(signer, 'settle', [
+    symbolArg(gate),
+    xdr.ScVal.scvVec(receipts.map(receiptArg)),
+  ]);
+}
+
+/** Kapinin imzali sayac beyanini zincire tasir. */
+export function gateReport(
+  signer: Signer,
+  o: { gate: string; counter: number; ts: number; sig: string },
+) {
+  return invokeContract(signer, 'gate_report', [
+    symbolArg(o.gate),
+    nativeToScVal(o.counter, { type: 'u32' }),
+    nativeToScVal(BigInt(o.ts), { type: 'u64' }),
+    bytesArg(o.sig),
+  ]);
+}
+
 const USDC_SCALE = 10_000_000n;
 const RATE_SCALE = 10_000_000n;
 const TRY_SCALE = 100n;
+
+// --- Hizmet bedeli ---------------------------------------------------------
+//
+// Sozlesmedeki `FEE_BPS` / `REBATE_PCT` ile AYNI olmak zorunda. Bu bir
+// komisyon degil teminat: kapi verisini zincire tasiyan kullaniciya %80'i
+// geri odeniyor. Tasiyan icin net maliyet %1, yani anchor makasi kadar.
+export const FEE_BPS = 500n;
+export const REBATE_PCT = 80n;
+
+/** Odenen tutardan kullanilabilir bakiye (sozlesme de boyle boluyor). */
+export const netOfFee = (gross: bigint) => (gross * 10_000n) / (10_000n + FEE_BPS);
+/** Istenen bakiye icin odenmesi gereken tutar. Yukari yuvarlar. */
+export const grossWithFee = (net: bigint) =>
+  (net * (10_000n + FEE_BPS) + 9_999n) / 10_000n;
+/** Bir gecis tasindiginda geri gelen bedel. */
+export const rebateFor = (charged: bigint) =>
+  (charged * FEE_BPS * REBATE_PCT) / (10_000n * 100n);
 
 /**
  * Bir gecisin stroop karsiligi. Sozlesmedeki `fare_in_stroops` ile birebir

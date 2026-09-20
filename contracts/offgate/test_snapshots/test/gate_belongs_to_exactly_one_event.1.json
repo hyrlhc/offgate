@@ -68,6 +68,9 @@
                 },
                 {
                   "symbol": "M307"
+                },
+                {
+                  "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
                 }
               ]
             }
@@ -93,6 +96,9 @@
                 },
                 {
                   "symbol": "M308"
+                },
+                {
+                  "bytes": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746"
                 }
               ]
             }
@@ -315,6 +321,60 @@
               "durability": "persistent",
               "val": {
                 "u32": 0
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M307"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M308"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746"
               }
             }
           },

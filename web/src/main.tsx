@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import Audit from './Audit.tsx';
+import Carry from './Carry.tsx';
 import How from './How.tsx';
 
 /** Router bagimliligina gerek yok: iki ekran, hash ile ayriliyor. */
@@ -13,6 +14,7 @@ function Root() {
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
   if (hash === '#audit') return <Audit />;
+  if (hash === '#tasi') return <Carry />;
   if (hash === '#nasil') return <How />;
   return <App />;
 }

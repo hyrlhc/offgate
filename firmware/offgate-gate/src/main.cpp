@@ -30,6 +30,15 @@
 static const char GATE_ID[] = OFFGATE_GATE_ID;
 static const char AP_SSID[] = "OFFGATE-" OFFGATE_GATE_ID;
 
+// Bu kapinin kendi ucreti, kurus. Biletin ust sinirindan DUSUK olabilir:
+// kullanici 100 TL'lik hakla 80 TL'lik kapidan gecerse aradaki 20 TL
+// bakiyesinde kalir — para ustu. Kapi, tahsil ettigi tutari kendi
+// anahtariyla imzalar; fazlasini tahsil edemez.
+#ifndef OFFGATE_FARE_TRY
+#define OFFGATE_FARE_TRY 10000
+#endif
+static const uint64_t GATE_FARE_TRY = OFFGATE_FARE_TRY;
+
 // Operatorun ham Ed25519 ACIK anahtari (gizli degil).
 // docs/DEPLOYMENTS.md icindeki OPERATOR_PK_HEX ile ayni olmali.
 static const uint8_t OPERATOR_PK[32] = {
@@ -276,9 +285,14 @@ static String process_pay(const String &body) {
     return deny("no_user", "Fiste kullanici adresi yok");
   }
 
-  // 4. Fis ile bilet ayni ucreti mi soyluyor?
+  // 4. Fis ile bilet ayni UST SINIRI mi soyluyor?
   if (r.fare_try != ent.fare_try) {
     return deny("fare_mismatch", "Ucret uyusmuyor");
+  }
+
+  // Bu kapinin ucreti biletin ust sinirini asamaz.
+  if (GATE_FARE_TRY > ent.fare_try) {
+    return deny("fare_too_high", "Bu kapinin ucreti biletin ustunde");
   }
 
   // 5. Entitlement dogrulamasi — onbellekte varsa atlanir.
@@ -353,12 +367,27 @@ static String process_pay(const String &body) {
     return deny("ledger_full", "Kapi defteri dolu — gorevliye bildirin");
   }
 
-  char eh[65], sg[129];
+  // 11. Tahsilat belgesi — kapinin KENDI imzasi.
+  //
+  // Kullanici bunu cevrimici bir ortama tasiyip sozlesmeye yazdiginda:
+  //   - operator yalnizca `charged_try` kadarini alir (para ustu kullanicida
+  //     kalir),
+  //   - kullaniciya hizmet bedelinin %80'i geri odenir,
+  //   - acikta kalan hak kapandigi icin iade edilebilir tutari buyur.
+  // Yani veriyi tasimanin karsiligi para; senkronizasyonu kullanici yapiyor.
+  uint8_t vsig[64];
+  mesh_sign_voucher(r.ent_hash, r.seq, GATE_FARE_TRY, r.ts, vsig);
+
+  char eh[65], sg[129], vg[129];
   bytes_to_hex(r.ent_hash, 32, eh);
   bytes_to_hex(r.sig, 64, sg);
+  bytes_to_hex(vsig, 64, vg);
   String stored = String("{\"ent_hash\":\"") + eh + "\",\"user\":\"" + String(user) +
                   "\",\"seq\":" + r.seq + ",\"fare_try\":\"" + (uint32_t)r.fare_try +
-                  "\",\"ts\":" + (uint32_t)r.ts + ",\"sig\":\"" + sg + "\"}";
+                  "\",\"ts\":" + (uint32_t)r.ts + ",\"sig\":\"" + sg +
+                  "\",\"gate\":\"" + GATE_ID +
+                  "\",\"charged_try\":\"" + (uint32_t)GATE_FARE_TRY +
+                  "\",\"gate_sig\":\"" + vg + "\"}";
   bool stored_ok = store_receipt(stored);
 
   accept(foreign ? (String("fis #") + r.seq + " — " + ent.gate + " onayladi (" + waited + " ms)")
@@ -372,7 +401,10 @@ static String process_pay(const String &body) {
                      ",\"home\":\"" + ent.gate + "\"" +
                      ",\"remote\":" + (foreign ? "true" : "false") +
          ",\"approval_ms\":" + waited +
-         ",\"stored\":" + (stored_ok ? "true" : "false") + "}";
+         ",\"stored\":" + (stored_ok ? "true" : "false") +
+         ",\"charged_try\":" + (uint32_t)GATE_FARE_TRY +
+         ",\"change_try\":" + (uint32_t)(ent.fare_try - GATE_FARE_TRY) +
+         ",\"receipt\":" + stored + "}";
 }
 
 // --- /pay ------------------------------------------------------------------
@@ -436,6 +468,25 @@ static void handle_screen() {
   http.send(200, "text/html", page);
 }
 
+/**
+ * Kapinin imzali sayac beyani — denetimin bagimsiz ikinci kaynagi.
+ *
+ * Bunu da kullanici tasiyabilir. Eskiden beyani operator yaziyordu, yani
+ * "beyan ile zincir bagimsiz kaynaklardan gelir" iddiasi sozdeydi; artik
+ * sayiyi turnikenin kendisi imzaliyor.
+ */
+static void handle_report() {
+  uint64_t ts = (uint64_t)(millis() / 1000);
+  uint8_t sig[64];
+  mesh_sign_report(g_counter, ts, sig);
+  char sg[129], pk_hex[65];
+  bytes_to_hex(sig, 64, sg);
+  bytes_to_hex(g_gate_pk, 32, pk_hex);
+  send_json(200, String("{\"gate\":\"") + GATE_ID + "\",\"counter\":" + g_counter +
+                     ",\"ts\":" + (uint32_t)ts + ",\"sig\":\"" + sg +
+                     "\",\"pk\":\"" + pk_hex + "\"}");
+}
+
 /** Gorevlinin laptopu fisleri buradan ceker, sonra zincire yazar. */
 static void handle_receipts() {
   String out = String("{\"gate\":\"") + GATE_ID + "\",\"counter\":" + g_counter +
@@ -451,6 +502,7 @@ static void handle_receipts() {
 /** Demo tekrari icin sayaci ve harcanmis fisleri sifirlar. */
 static void handle_reset() {
   nvs.clear();
+  mesh_persist_identity(nvs);   // kimlik silinmemeli: zincirdeki kayit ona bagli
   g_counter = 0;
   g_receipt_count = 0;
   g_receipt_lost = 0;
@@ -511,12 +563,15 @@ void setup() {
   http.on("/reset", handle_reset);
   http.on("/health", handle_health);
   http.on("/peers", handle_peers);
+  http.on("/report", handle_report);
   http.onNotFound(handle_not_found);
   http.begin();
 
   Serial.println();
   Serial.printf("OffGate kapi hazir\n");
   Serial.printf("  kapi     : %s\n", GATE_ID);
+  Serial.printf("  ucret    : %llu kurus (%.2f TL)\n",
+                (unsigned long long)GATE_FARE_TRY, GATE_FARE_TRY / 100.0);
   Serial.printf("  wifi     : %s (sifresiz)\n", AP_SSID);
   Serial.printf("  adres    : http://%s\n", ip.toString().c_str());
   Serial.printf("  sayac    : %u gecis, %u fis saklı\n", g_counter, g_receipt_count);
@@ -568,6 +623,7 @@ static void serial_console() {
       }
     } else if (cmd == "RESET") {
       nvs.clear();
+      mesh_persist_identity(nvs);   // kimlik silinmemeli: zincirdeki kayit ona bagli
       g_counter = 0;
       g_receipt_count = 0;
       g_receipt_lost = 0;
@@ -586,7 +642,10 @@ void loop() {
 
   // Komsulardan gelen imzali kayitlar — kesme baglaminda degil, burada islenir.
   mesh_pump(GATE_ID);
-  if (millis() - g_last_announce > MESH_ANNOUNCE_MS) {
+  // Yeni komsu duyulduysa periyodu bekleme: kesif karsilikli olmadan soru
+  // sorulamaz, cunku soru yalnizca TANINAN komsudan kabul edilir.
+  if (g_greet_pending || millis() - g_last_announce > MESH_ANNOUNCE_MS) {
+    g_greet_pending = false;
     g_last_announce = millis();
     mesh_announce(GATE_ID, g_counter);
   }

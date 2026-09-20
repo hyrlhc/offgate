@@ -68,6 +68,9 @@
                 },
                 {
                   "symbol": "M307"
+                },
+                {
+                  "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
                 }
               ]
             }
@@ -89,7 +92,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -111,7 +114,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -148,7 +151,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -159,185 +162,7 @@
         }
       ]
     ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "settle",
-              "args": [
-                {
-                  "symbol": "M307"
-                },
-                {
-                  "vec": [
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ent_hash"
-                          },
-                          "val": {
-                            "bytes": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "fare_try"
-                          },
-                          "val": {
-                            "i128": "10000"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "seq"
-                          },
-                          "val": {
-                            "u32": 1
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "sig"
-                          },
-                          "val": {
-                            "bytes": "8fd04d90b22f0c3e328a23342f7ada39b4fa3e770a72e7e00c70dae9b862d3a53273fadddc6868628811848e14aa4fe7f4823b78bbaf458afa1cd5093aca6a08"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "ts"
-                          },
-                          "val": {
-                            "u64": "1700000001"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "user"
-                          },
-                          "val": {
-                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ent_hash"
-                          },
-                          "val": {
-                            "bytes": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "fare_try"
-                          },
-                          "val": {
-                            "i128": "10000"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "seq"
-                          },
-                          "val": {
-                            "u32": 2
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "sig"
-                          },
-                          "val": {
-                            "bytes": "04ec944f5daf1a3fed44b177416892fe5087e6ba30ef9bc3d396f8b3d285aa36295020942503558de22f9f04db21450ee845281e5c70bac40aeb1adcfe348202"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "ts"
-                          },
-                          "val": {
-                            "u64": "1700000002"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "user"
-                          },
-                          "val": {
-                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ent_hash"
-                          },
-                          "val": {
-                            "bytes": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "fare_try"
-                          },
-                          "val": {
-                            "i128": "10000"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "seq"
-                          },
-                          "val": {
-                            "u32": 3
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "sig"
-                          },
-                          "val": {
-                            "bytes": "f5a7300b45e74071c2554c0f5dea544988ba15c278cbe5db9ff48b34e659b0b34888b4e923bacfea3e8e52479252661c373a46376639fabfc8677427b6df140d"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "ts"
-                          },
-                          "val": {
-                            "u64": "1700000003"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "user"
-                          },
-                          "val": {
-                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
+    [],
     [],
     [],
     [],
@@ -406,26 +231,6 @@
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "1033654523790656264"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "4270020994084947596"
                 }
               },
               "durability": "temporary",
@@ -546,6 +351,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "2640234"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -565,7 +378,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -639,6 +452,33 @@
               "durability": "persistent",
               "val": {
                 "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M307"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
               }
             }
           },
@@ -990,7 +830,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "40505787"
+                      "i128": "43146021"
                     }
                   },
                   {
@@ -1042,7 +882,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "109559766"
                     }
                   },
                   {

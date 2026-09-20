@@ -250,6 +250,9 @@ button.link-btn:hover:not(:disabled) { color: var(--muted); }
 .note-more { font-size: 11px; color: var(--faint); margin-left: 2px; }
 .buy-math { margin: 0; font-size: 13px; color: var(--muted); }
 .buy-math b { color: var(--ink); font-weight: 650; }
+/* Teminat satiri: toplamin nereden geldigi tek bakista gorunsun. */
+.buy-fee { margin: 2px 0 0; font-size: 12px; color: var(--faint); }
+.buy-fee b { color: var(--ink); font-weight: 650; }
 
 .saved-band {
   border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px;

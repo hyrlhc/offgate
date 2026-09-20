@@ -68,6 +68,9 @@
                 },
                 {
                   "symbol": "M307"
+                },
+                {
+                  "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
                 }
               ]
             }
@@ -89,7 +92,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -111,7 +114,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -148,7 +151,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -342,6 +345,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -361,7 +372,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -435,6 +446,33 @@
               "durability": "persistent",
               "val": {
                 "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M307"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
               }
             }
           },
@@ -590,7 +628,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -642,7 +680,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {

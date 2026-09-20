@@ -129,10 +129,10 @@
                   "i128": "487850780"
                 },
                 {
-                  "bytes": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84"
+                  "bytes": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
                 },
                 {
-                  "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                  "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                 }
               ]
             }
@@ -162,7 +162,6 @@
         }
       ]
     ],
-    [],
     [],
     []
   ],
@@ -310,7 +309,7 @@
                       "symbol": "device_pk"
                     },
                     "val": {
-                      "bytes": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84"
+                      "bytes": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
                     }
                   },
                   {
@@ -318,7 +317,7 @@
                       "symbol": "ent_hash"
                     },
                     "val": {
-                      "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                      "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                     }
                   },
                   {
@@ -580,7 +579,7 @@
                     "symbol": "Spent"
                   },
                   {
-                    "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                    "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                   },
                   {
                     "u32": 1
@@ -610,7 +609,7 @@
                     "symbol": "Spent"
                   },
                   {
-                    "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                    "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                   },
                   {
                     "u32": 2
@@ -640,7 +639,7 @@
                     "symbol": "Spent"
                   },
                   {
-                    "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                    "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                   },
                   {
                     "u32": 3
@@ -670,7 +669,7 @@
                     "symbol": "Spent"
                   },
                   {
-                    "bytes": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+                    "bytes": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
                   },
                   {
                     "u32": 4

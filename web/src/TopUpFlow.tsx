@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CONFIG, expertAccount, expertTx, formatRate, formatTry, gateLabel } from './config.ts';
 import {
-  accountOf, contractErrorMessage, listGates, refund,
+  accountOf, contractErrorMessage, grossWithFee, listGates, REBATE_PCT, refund,
   type ChainAccount, type GateInfo,
 } from './lib/contract.ts';
 import { INITIAL_STEPS, runTopUp, type Step, type StepId, type StepState, type Ticket } from './lib/flow.ts';
@@ -72,8 +72,14 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
   const started = useMemo(() => steps.some((s) => s.state !== 'bekliyor'), [steps]);
 
   const fareTry = CONFIG.fareTryKurus / 100;                 // bir geçişin TL fiyatı
-  const amountTry = passes * fareTry;                        // toplam, tam sayı
-  const maxPasses = Math.floor(CONFIG.maxDepositTry / fareTry);
+  const passesTry = passes * fareTry;                        // banknotların toplamı
+  // Üstüne %5 teminat. Kaybolmuyor: kapı verisini zincire taşıyınca %80'i
+  // cüzdana geri dönüyor (#tasi ekranı), yani taşıyan için net maliyet %1.
+  const totalKurus = Number(grossWithFee(BigInt(passes * CONFIG.fareTryKurus)));
+  const feeTry = totalKurus / 100 - passesTry;
+  const amountTry = totalKurus / 100;
+  const backTry = (feeTry * Number(REBATE_PCT)) / 100;
+  const maxPasses = Math.floor(CONFIG.maxDepositTry / (fareTry * 1.05));
   const minPasses = Math.max(1, Math.ceil(CONFIG.minDepositTry / fareTry));
 
   const emit = useCallback((id: StepId, state: StepState, detail?: string) => {
@@ -236,11 +242,20 @@ export default function TopUpFlow({ onTicket }: { onTicket?: (t: Ticket) => void
               {passes > 12 && <span className="note-more">+{passes - 12}</span>}
             </div>
             <p className="buy-math">
-              {passes} × {fareTry} TL = <b>{amountTry.toLocaleString('tr-TR')} TL</b>
+              {passes} × {fareTry} TL = <b>{passesTry.toLocaleString('tr-TR')} TL</b>
+            </p>
+            <p className="buy-fee">
+              + {feeTry.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} TL teminat
+              {' '}= <b>{amountTry.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} TL</b>
             </p>
           </div>
           <dl className="kv tight">
             <dt>Geçiş ücreti</dt><dd>{formatTry(CONFIG.fareTryKurus)}</dd>
+            <dt>Teminat</dt>
+            <dd>
+              %5 — kapı verisini taşırsan{' '}
+              <b>{backTry.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} TL</b> geri
+            </dd>
             <dt>Etkinlik</dt><dd>{CONFIG.eventId}</dd>
           </dl>
 

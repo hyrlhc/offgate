@@ -68,6 +68,9 @@
                 },
                 {
                   "symbol": "M307"
+                },
+                {
+                  "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
                 }
               ]
             }
@@ -89,7 +92,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -111,7 +114,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -148,7 +151,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -159,133 +162,7 @@
         }
       ]
     ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "settle",
-              "args": [
-                {
-                  "symbol": "M307"
-                },
-                {
-                  "vec": [
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ent_hash"
-                          },
-                          "val": {
-                            "bytes": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "fare_try"
-                          },
-                          "val": {
-                            "i128": "10000"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "seq"
-                          },
-                          "val": {
-                            "u32": 1
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "sig"
-                          },
-                          "val": {
-                            "bytes": "b66bad3cd3fe3b2a8d9097d954814f1e7848a9dfa03d43350383b394763cccf2523176dab5a3826fc2aeb4e51f1ab0e8e335720a449d545a7148424cf00ae908"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "ts"
-                          },
-                          "val": {
-                            "u64": "1700000001"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "user"
-                          },
-                          "val": {
-                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ent_hash"
-                          },
-                          "val": {
-                            "bytes": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "fare_try"
-                          },
-                          "val": {
-                            "i128": "10000"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "seq"
-                          },
-                          "val": {
-                            "u32": 2
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "sig"
-                          },
-                          "val": {
-                            "bytes": "2d2661f3d82dc7600c62ac46fa7397fd9e542996e750b5c12a3b775cdd0334d321030858ff5c4b45dec17e535911e9f370f2f2825475e26a8dc37029044aa10c"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "ts"
-                          },
-                          "val": {
-                            "u64": "1700000002"
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "user"
-                          },
-                          "val": {
-                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
+    [],
     [],
     [
       [
@@ -494,26 +371,6 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "8370022561469687789"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
               "key": {
                 "vec": [
@@ -533,7 +390,7 @@
                       "symbol": "balance"
                     },
                     "val": {
-                      "i128": "163003858"
+                      "i128": "158146715"
                     }
                   },
                   {
@@ -578,6 +435,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "8317299"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -597,7 +462,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "204000000"
+                      "i128": "209100000"
                     }
                   },
                   {
@@ -671,6 +536,33 @@
               "durability": "persistent",
               "val": {
                 "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M307"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
               }
             }
           },
@@ -924,7 +816,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "6277191135259896685"
+                  "nonce": "8370022561469687789"
                 }
               },
               "durability": "temporary",
@@ -1012,7 +904,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "163003858"
+                      "i128": "166464014"
                     }
                   },
                   {
@@ -1064,7 +956,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "108739844"
                     }
                   },
                   {

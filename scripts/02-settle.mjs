@@ -35,13 +35,22 @@ header('OffGate — gorevli senkronizasyonu (P9)');
 // --- 1. Fisleri topla ------------------------------------------------------
 step('Kapidan fisleri cek');
 let payload;
+let report = null;
 if (source.startsWith('http')) {
   const res = await fetch(`${source}/receipts`, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`Kapi ${res.status} dondu`);
   payload = await res.json();
   info(`kaynak: ${source}/receipts`);
+  // Kapinin IMZALI sayac beyani. Sozlesme artik imzasiz beyan kabul etmiyor:
+  // denetimin ikinci kaynagi gercekten bagimsiz olsun diye sayiyi operator
+  // degil turnikenin kendisi imzaliyor.
+  try {
+    const rr = await fetch(`${source}/report`, { signal: AbortSignal.timeout(15_000) });
+    if (rr.ok) report = await rr.json();
+  } catch { /* kapi eski firmware olabilir; asagida uyariyoruz */ }
 } else {
   payload = JSON.parse(readFileSync(source, 'utf8'));
+  report = payload.report ?? null;
   info(`kaynak: ${source} (dosya)`);
 }
 const { gate, counter = 0, receipts = [] } = payload;
@@ -82,6 +91,12 @@ for (const r of receipts) {
     fail(`seq ${r.seq}: imza gecersiz — batch'e alinmiyor`);
     continue;
   }
+  // Kapinin tahsilat belgesi olmadan sozlesme fisi kabul etmiyor: tahsil
+  // edilen tutari yalnizca kapi soyleyebilir.
+  if (!r.gate_sig) {
+    fail(`seq ${r.seq}: kapi imzasi yok — eski bicimde fis`);
+    continue;
+  }
   good.push(r);
 }
 ok(`${good.length}/${receipts.length} fis gecerli`);
@@ -101,10 +116,15 @@ const receiptsArg = xdr.ScVal.scvVec(good.map((r) => nativeToScVal({
   fare_try: BigInt(r.fare_try),
   ts: BigInt(r.ts),
   sig: Buffer.from(r.sig, 'hex'),
+  // Kapinin imzaladigi FIILI tahsilat. Ust sinir `fare_try`; kapi daha az
+  // tahsil ettiyse fark kullanicinin bakiyesinde kalir (para ustu).
+  charged_try: BigInt(r.charged_try ?? r.fare_try),
+  gate_sig: Buffer.from(r.gate_sig, 'hex'),
 }, {
   type: {
     ent_hash: ['symbol', null], user: ['symbol', null], seq: ['symbol', 'u32'],
     fare_try: ['symbol', 'i128'], ts: ['symbol', 'u64'], sig: ['symbol', null],
+    charged_try: ['symbol', 'i128'], gate_sig: ['symbol', null],
   },
 })));
 
@@ -113,10 +133,20 @@ ok(`${settled.value} fis kabul edildi`);
 link('islem', expertTx(settled.hash));
 
 // --- 4. Kapinin beyanini kaydet -------------------------------------------
-step('gate_report — kapinin beyani');
-const reported = await invoke('gate_report', [symbolArg(gate), u32Arg(counter)]);
-ok(`kapi ${counter} gecis beyan etti`);
-link('islem', expertTx(reported.hash));
+step('gate_report — kapinin IMZALI beyani');
+if (!report?.sig) {
+  fail('kapidan imzali beyan alinamadi — beyan zincire yazilmadi');
+  info('kapi /report ucunu servis etmeli (yeni firmware).');
+} else {
+  const reported = await invoke('gate_report', [
+    symbolArg(gate),
+    u32Arg(report.counter),
+    nativeToScVal(BigInt(report.ts), { type: 'u64' }),
+    nativeToScVal(Buffer.from(report.sig, 'hex'), { type: 'bytes' }),
+  ]);
+  ok(`kapi ${report.counter} gecis beyan etti (kendi imzasiyla)`);
+  link('islem', expertTx(reported.hash));
+}
 
 // --- 5. Denetim ------------------------------------------------------------
 step('Denetim');

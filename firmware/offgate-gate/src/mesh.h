@@ -131,6 +131,8 @@ static MeshPeer g_peers[MESH_MAX_PEERS];
 static uint32_t g_mesh_sent = 0;
 static uint32_t g_mesh_recv = 0;
 static uint32_t g_last_announce = 0;
+/** Yeni bir komsu duyuldu: periyodu beklemeden karsilik verilecek. */
+static bool g_greet_pending = false;
 
 // ESP-NOW geri cagrisi kesme baglaminda calisir: orada NVS'e yazilmaz,
 // dogrulama yapilmaz. Paketi kuyruga alip loop() icinde isliyoruz.
@@ -239,6 +241,19 @@ inline uint8_t ask_verdict(const uint8_t msg[ASK_MSG_LEN]) {
 
 // --- Kimlik ----------------------------------------------------------------
 
+/**
+ * Kapinin kimligini NVS'e geri yazar.
+ *
+ * `nvs.clear()` her seyi siler — kapinin kimlik anahtarini da. Demo icin
+ * defteri temizlemek istedigimizde kimligi kaybedersek kapi sonraki
+ * aciliste YENI bir anahtar uretir ve sozlesmedeki `register_gate` kaydi
+ * gecersiz kalir: imzaladigi hicbir tahsilat belgesi artik dogrulanmaz.
+ * Bu yuzden temizlikten sonra kimlik hemen geri yaziliyor.
+ */
+inline void mesh_persist_identity(Preferences &nvs) {
+  nvs.putBytes("gate_sk", g_gate_sk, 32);
+}
+
 /** Kapinin anahtar cifti: ilk aciliste uretilir, NVS'te kalir. */
 inline void mesh_load_identity(Preferences &nvs) {
   size_t n = nvs.getBytes("gate_sk", g_gate_sk, 32);
@@ -248,6 +263,56 @@ inline void mesh_load_identity(Preferences &nvs) {
     Serial.println("[mesh] yeni kapi anahtari uretildi");
   }
   Ed25519::derivePublicKey(g_gate_pk, g_gate_sk);
+}
+
+// --- Zincire tasinacak imzali belgeler -------------------------------------
+//
+// Kapi yalnizca komsusuyla konusmuyor; ZINCIRE de konusuyor. Ama zincire
+// dogrudan baglanmiyor — belgeyi imzalayip kullaniciya veriyor, kullanici
+// cevrimici bir ortama gecince sozlesmeye yaziyor. Sozlesme kapinin acik
+// anahtarini bildigi icin belgenin yetkili bir turnikeden geldigini anliyor.
+//
+// Kullanicinin bunu yapmak icin sebebi var: tasidigi her gecis icin
+// hizmet bedelinin %80'i cuzdanina geri donuyor. Boylece senkronizasyon
+// isini operator degil kullanicilar yapiyor — ve bedavaya.
+
+static const char VCHR_DOMAIN[] = "OFFGATE-VCHR-v1";  // 15 bayt
+static const char RPRT_DOMAIN[] = "OFFGATE-RPRT-v1";  // 15 bayt
+static const size_t VCHR_MSG_LEN = 67;  // domain(15)||ent_hash(32)||seq(4)||charged(8)||ts(8)
+static const size_t RPRT_MSG_LEN = 27;  // domain(15)||counter(4)||ts(8)
+
+/**
+ * Tahsilat belgesi: "su fisten su kadar tahsil ettim".
+ *
+ * Kapi fazla tahsil EDEMEZ — ust sinir kullanicinin imzaladigi `fare_try`,
+ * ve sozlesme bunu kontrol ediyor. Eksik beyan da isine gelmez, cunku
+ * parayi operator aliyor. Iki imza birbirini kistiriyor.
+ */
+inline void voucher_bytes(const uint8_t ent_hash[32], uint32_t seq, uint64_t charged_try,
+                          uint64_t ts, uint8_t out[VCHR_MSG_LEN]) {
+  uint8_t *p = out;
+  memcpy(p, VCHR_DOMAIN, 15);  p += 15;
+  memcpy(p, ent_hash, 32);     p += 32;
+  put_u32be(p, seq);           p += 4;
+  put_u64be(p, charged_try);   p += 8;
+  put_u64be(p, ts);            p += 8;
+}
+
+inline void mesh_sign_voucher(const uint8_t ent_hash[32], uint32_t seq, uint64_t charged_try,
+                              uint64_t ts, uint8_t sig_out[64]) {
+  uint8_t msg[VCHR_MSG_LEN];
+  voucher_bytes(ent_hash, seq, charged_try, ts, msg);
+  Ed25519::sign(sig_out, g_gate_sk, g_gate_pk, msg, VCHR_MSG_LEN);
+}
+
+/** Kapinin kendi gecis sayaci beyani — denetimin bagimsiz ikinci kaynagi. */
+inline void mesh_sign_report(uint32_t counter, uint64_t ts, uint8_t sig_out[64]) {
+  uint8_t msg[RPRT_MSG_LEN];
+  uint8_t *p = msg;
+  memcpy(p, RPRT_DOMAIN, 15);  p += 15;
+  put_u32be(p, counter);       p += 4;
+  put_u64be(p, ts);            p += 8;
+  Ed25519::sign(sig_out, g_gate_sk, g_gate_pk, msg, RPRT_MSG_LEN);
 }
 
 // --- Komsu tablosu ---------------------------------------------------------
@@ -349,6 +414,11 @@ inline void mesh_pump(const char *self_gate) {
       p = mesh_peer_add(from, pkt.pk);
       if (!p) continue;
       Serial.printf("[mesh] yeni komsu: %s\n", from);
+      // Hemen karsilik ver. Kesif tek yonlu kalirsa komsu bizi tanimadigi
+      // icin SORULARIMIZI yok sayar — ve soru yalnizca taninan komsudan
+      // kabul edildigi icin (hak eksiltiyor) bu sessiz bir kilitlenmedir.
+      // Duyuru periyodunu beklemeden el sikisiyoruz.
+      g_greet_pending = true;
     }
 
     p->heard = millis();

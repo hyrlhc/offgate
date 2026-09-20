@@ -68,6 +68,9 @@
                 },
                 {
                   "symbol": "M307"
+                },
+                {
+                  "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
                 }
               ]
             }
@@ -90,6 +93,9 @@
                 },
                 {
                   "symbol": "M308"
+                },
+                {
+                  "bytes": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746"
                 }
               ]
             }
@@ -112,6 +118,9 @@
                 },
                 {
                   "symbol": "M309"
+                },
+                {
+                  "bytes": "12a41592c8b7c17d4059e7b29b61e8ff96c7415f2f803348f2f017e05b9ea1da"
                 }
               ]
             }
@@ -134,7 +143,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -156,7 +165,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -193,7 +202,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -218,7 +227,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -240,7 +249,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -277,7 +286,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -302,7 +311,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -324,7 +333,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -361,7 +370,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -386,7 +395,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -408,7 +417,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -445,7 +454,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -470,7 +479,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -492,7 +501,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -529,7 +538,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -554,7 +563,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
                 },
                 {
-                  "i128": "204000000"
+                  "i128": "214200000"
                 }
               ]
             }
@@ -576,7 +585,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
                 },
                 {
-                  "i128": "102000000"
+                  "i128": "107100000"
                 },
                 {
                   "symbol": "EVT1"
@@ -613,7 +622,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   ]
                 }
@@ -949,6 +958,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -968,7 +985,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1065,6 +1082,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -1084,7 +1109,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1181,6 +1206,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -1200,7 +1233,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1297,6 +1330,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -1316,7 +1357,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1413,6 +1454,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -1432,7 +1481,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1529,6 +1578,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "fee_held"
+                    },
+                    "val": {
+                      "i128": "5100000"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "gate"
                     },
                     "val": {
@@ -1548,7 +1605,7 @@
                       "symbol": "locked"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -1730,6 +1787,87 @@
               "durability": "persistent",
               "val": {
                 "u32": 2
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M307"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb8"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M308"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 500000
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "GatePk"
+                  },
+                  {
+                    "symbol": "M309"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "12a41592c8b7c17d4059e7b29b61e8ff96c7415f2f803348f2f017e05b9ea1da"
               }
             }
           },
@@ -1991,7 +2129,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "612000000"
+                      "i128": "642600000"
                     }
                   },
                   {
@@ -2043,7 +2181,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -2095,7 +2233,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -2147,7 +2285,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -2199,7 +2337,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -2251,7 +2389,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {
@@ -2303,7 +2441,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "102000000"
+                      "i128": "107100000"
                     }
                   },
                   {

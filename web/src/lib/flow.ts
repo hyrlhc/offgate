@@ -10,8 +10,8 @@ import {
   depositExchange, discover, makeSession, requestQuote, simulateBankTransfer, waitForCompletion,
 } from './anchor.ts';
 import {
-  accountOf, contractErrorMessage, ensureTrustline, fareInStroops, lockFloat,
-  nextGrant, rateForExactPasses, topUp, usdcToStroops,
+  accountOf, contractErrorMessage, ensureTrustline, fareInStroops, grossWithFee,
+  lockFloat, netOfFee, nextGrant, rateForExactPasses, topUp, usdcToStroops,
 } from './contract.ts';
 import {
   buildReceiptBook, entitlementHash, loadOrCreateDeviceKey, toHex, type Entitlement, type SignedReceipt,
@@ -79,7 +79,10 @@ export async function runTopUp(
   signer: Signer, gate: string, passes: number, emit: Emit,
 ): Promise<Ticket> {
   // Fiyat ilkokul matematigi: bir gecis bir banknot, banknot 100 TL.
-  const amountTry = String((passes * CONFIG.fareTryKurus) / 100);
+  // Ustune %5 teminat. Teminat kaybolmuyor: kapi verisini zincire tasiyinca
+  // %80'i cuzdana geri donuyor, yani tasiyan icin net maliyet %1.
+  const fareTotalKurus = passes * CONFIG.fareTryKurus;
+  const amountTry = (Number(grossWithFee(BigInt(fareTotalKurus))) / 100).toFixed(2);
   const run = async <T>(id: StepId, fn: () => Promise<T>, detail?: (v: T) => string) => {
     emit(id, 'calisiyor');
     try {
@@ -141,16 +144,20 @@ export async function runTopUp(
   // Yeni bilette kur, GERCEKLESEN yatirmadan geri hesaplanir; boylece
   // N banknot her zaman tam N gecis eder. Ek yuklemede kur zincirde kilitli
   // kalir — kullanicinin gecis basina odedigi TL degismesin diye.
+  // Kur, hizmet bedeli DUSULDUKTEN sonraki bakiyeden hesaplanir: sozlesme de
+  // gecis hakkini o bakiyeden sayiyor. Brut tutardan hesaplasaydik N banknot
+  // N+1 gecis gorunur, sonra zincirde N cikardi.
+  const netStroops = netOfFee(amountStroops);
   const lockedRate = existing
     ? Number(existing.rate)
-    : rateForExactPasses(amountStroops, fareTry, passes);
+    : rateForExactPasses(netStroops, fareTry, passes);
 
   // Gecis hakki uydurulmaz. Yeni bilette bakiyenin karsiladigi kadar; ek
   // yuklemede ise kontrat, kapida harcanmis olabilecek eski haklari dusup
   // soyluyor (`next_grant`). Operator imza ucu ayni sayiyi zincirden okur.
   const maxUses = existing
     ? await nextGrant(signer.address, amountStroops)
-    : Number(amountStroops / fareInStroops(fareTry, lockedRate));
+    : Number(netStroops / fareInStroops(fareTry, lockedRate));
   if (maxUses < 1) throw new Error('Bu tutar bir geçiş daha eklemeye yetmiyor.');
 
   const entitlement: Entitlement = {
