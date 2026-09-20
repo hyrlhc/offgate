@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| **Canlı uygulama** | https://offgate.vercel.app |
+| **Canlı uygulama** | https://offgate.vercel.app · arayüz İngilizce, üst çubuktan TR |
 | **Sözleşme (testnet)** | [`CAYBDH2A…NHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Donanım** | 2 × ESP32 — `M307` (Kapı 1), `M308` (Kapı 2) |
 | **Ağ** | Stellar Testnet · gerçek para hareketi yoktur |
@@ -347,6 +347,43 @@ Son satır mekanizmanın kalbi: veriyi taşımadan önce kullanıcı hiçbir şe
 çekemiyordu, taşıyınca kilit çözüldü.
 
 ---
+
+---
+
+## Anchor arızasına karşı yedek profil
+
+Hackathon anchor'ı (`tr-mock-anchor.fly.dev`) iki kez ödeme yapmayı bıraktı.
+Ölçtük: **bütün SEP uçları 200 dönüyor**, sipariş açılıyor, tutar
+hesaplanıyor, anchor kendi mesajında *"TRY received; paying USDC on
+Stellar"* diyor — ve USDC hiç gelmiyor. 85 sorgu, 5.5 dakika,
+`pending_anchor`da sabit.
+
+Protokol katmanı sağlam, **ödeme işçisi ölü.** Bizim kodumuzun dokunduğu bir
+yer değil, ama demoyu tamamen durduruyor.
+
+### İki profil
+
+| | Anchor | Varlık | Sözleşme |
+|---|---|---|---|
+| **`live`** *(varsayılan)* | Gerçek anchor, SEP-1/10/38/6 | USDC | `CAYBDH2A…` |
+| `local` | Yok — kendi ihraççımız | `TUSDC` | `CB6AUNVO…` |
+
+Üst çubuktaki **Anchor / Fallback** anahtarı ikisi arasında geçiyor.
+
+**Gerçek anchor yolunun tek satırı değişmedi.** Yedek ayrı bir sözleşme ve
+ayrı bir varlık kullanıyor; açılmadığı sürece tek satırı bile çalışmıyor.
+Entegrasyon iddiası yalnızca `live` profil içindir.
+
+### Dürüstlük
+
+Yedek bir anchor **taklidi değil** ve öyle sunulmuyor: üst çubukta "Fallback"
+diye yanıyor, akış adımlarında *"skipped in fallback mode"* yazıyor. Amacı
+tek: anchor ölüyken zincirin, kapıların, para üstünün ve veri taşıma ödülünün
+çalıştığını gösterebilmek.
+
+Her iki profilde de imza zincirdeki kilide karşı doğrulanıyor (K-9) — yedekte
+güvenlik gevşetilmedi. Kapı firmware'i hiç değişmiyor; kapı hangi sözleşmenin
+arkada olduğunu zaten bilmez, yalnızca operatör imzasına bakar.
 
 ## Zorunlu beyanlar
 

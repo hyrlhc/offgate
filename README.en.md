@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| **Live app** | https://offgate.vercel.app |
+| **Live app** | https://offgate.vercel.app · English by default, TR in the top bar |
 | **Contract (testnet)** | [`CAYBDH2A…NHWILA7AZH`](https://stellar.expert/explorer/testnet/contract/CAYBDH2AUVXOYJPRBE7MZ46ZOLW3O53PIDOKGWWOV4Z4PONHWILA7AZH) |
 | **Hardware** | 2 × ESP32 — `M307` (Gate 1), `M308` (Gate 2) |
 | **Network** | Stellar Testnet · no real money moves |
@@ -359,6 +359,43 @@ That last row is the heart of it: before carrying the data the user could
 withdraw nothing; carrying it released the lock.
 
 ---
+
+---
+
+## A fallback profile for anchor outages
+
+The hackathon anchor (`tr-mock-anchor.fly.dev`) stopped paying out twice. We
+measured it: **every SEP endpoint returns 200**, the order opens, the amount is
+computed, the anchor itself says *"TRY received; paying USDC on Stellar"* — and
+the USDC never arrives. 85 polls, 5.5 minutes, stuck at `pending_anchor`.
+
+The protocol layer is healthy; the **payout worker is dead**. Nothing our code
+touches, but it stops the demo completely.
+
+### Two profiles
+
+| | Anchor | Asset | Contract |
+|---|---|---|---|
+| **`live`** *(default)* | Real anchor, SEP-1/10/38/6 | USDC | `CAYBDH2A…` |
+| `local` | None — our own issuer | `TUSDC` | `CB6AUNVO…` |
+
+The **Anchor / Fallback** switch in the top bar moves between them.
+
+**Not one line of the live anchor path changed.** The fallback uses a separate
+contract and a separate asset; unless it is switched on, none of its code runs.
+The integration claim applies to the `live` profile only.
+
+### Honesty
+
+The fallback is **not an anchor impersonation** and is not presented as one: the
+top bar lights up "Fallback" and the flow steps read *"skipped in fallback
+mode"*. Its only purpose is to show that the chain, the gates, the change logic
+and the data-carrying reward still work while the anchor is down.
+
+In both profiles the signature is verified against the on-chain lock (K-9) —
+nothing was loosened in the fallback. The gate firmware does not change at all;
+a gate never knows which contract is behind it, it only checks the operator
+signature.
 
 ## Required declarations
 
