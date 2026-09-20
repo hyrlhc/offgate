@@ -69,9 +69,9 @@ operatör bunu anchor üzerinden TL olarak çeker. Tam döngü testnet üzerinde
 
 ```mermaid
 flowchart LR
-    A["1. Cevrimici<br/>TL girer, bakiye zincire kilitlenir"]
-    B["2. Cevrimdisi<br/>kapi dogrular ve acilir"]
-    C["3. Tekrar cevrimici<br/>fisler zincire, operator odenir"]
+    A["1. Çevrimiçi<br/>TL girer, bakiye zincire kilitlenir"]
+    B["2. Çevrimdışı<br/>kapı doğrular ve açılır"]
+    C["3. Tekrar çevrimiçi<br/>fişler zincire, operatör ödenir"]
     A --> B --> C
 ```
 
@@ -677,30 +677,30 @@ operatör imzasına bakıyor.
 ## Depo yerleşimi
 
 ```
-contracts/offgate/src/lib.rs    Soroban sozlesmesi, 1023 satir
-contracts/offgate/src/test.rs   46 host testi, gercek Ed25519 imzalariyla
+contracts/offgate/src/lib.rs    Soroban sözleşmesi, 1023 satır
+contracts/offgate/src/test.rs   46 host testi, gerçek Ed25519 imzalarıyla
 
-web/shared/deployment.js        Dagitim sabitleri, iki profil
-web/src/lib/signer.ts           Stellar Wallets Kit, entegrasyon ortagi
+web/shared/deployment.js        Dağıtım sabitleri, iki profil
+web/src/lib/signer.ts           Stellar Wallets Kit, entegrasyon ortağı
 web/src/lib/anchor.ts           SEP-1, SEP-10, SEP-38, SEP-6
-web/src/lib/contract.ts         Soroban cagrilari ve ScVal kodlamasi
-web/src/lib/receipts.ts         Kanonik bicimler, fis defteri, cihaz anahtari
-web/src/lib/carry.ts            Kapi verisini cozme ve zincire yazma
-web/src/lib/flow.ts             Tek dugmenin arkasindaki sira
-web/src/lib/i18n.ts             Ingilizce ve Turkce
-web/src/TopUpFlow.tsx           Satin alma arayuzu
-web/src/Carry.tsx               Kapi verisini tasi, iadeyi al
+web/src/lib/contract.ts         Soroban çağrıları ve ScVal kodlaması
+web/src/lib/receipts.ts         Kanonik biçimler, fiş defteri, cihaz anahtarı
+web/src/lib/carry.ts            Kapı verisini çözme ve zincire yazma
+web/src/lib/flow.ts             Tek düğmenin arkasındaki sıra
+web/src/lib/i18n.ts             İngilizce ve Türkçe
+web/src/TopUpFlow.tsx           Satın alma arayüzü
+web/src/Carry.tsx               Kapı verisini taşı, iadeyi al
 web/src/Audit.tsx               Beyan ile zincir yan yana
-web/api/sign-entitlement.js     Operator imza ucu, sunucu tarafi
-web/api/fallback-payout.js      Yedek profil odemesi, sunucu tarafi
+web/api/sign-entitlement.js     Operatör imza ucu, sunucu tarafı
+web/api/fallback-payout.js      Yedek profil ödemesi, sunucu tarafı
 
-firmware/offgate-gate/src/offgate.h    Kanonik bicimler, Ed25519 dogrulama
-firmware/offgate-gate/src/mesh.h       ESP-NOW, kapi kimligi, belgeler
-firmware/offgate-gate/src/main.cpp     Kapi mantigi, defter, captive portal
-firmware/offgate-gate/src/selftest.h   Acilista calisan bicim kaniti
+firmware/offgate-gate/src/offgate.h    Kanonik biçimler, Ed25519 doğrulama
+firmware/offgate-gate/src/mesh.h       ESP-NOW, kapı kimliği, belgeler
+firmware/offgate-gate/src/main.cpp     Kapı mantığı, defter, captive portal
+firmware/offgate-gate/src/selftest.h   Açılışta çalışan biçim kanıtı
 
-scripts/                        Kurulum ve operator isleri
-docs/                           Mimari, anlatim, artefaktlar, test vektoru
+scripts/                        Kurulum ve operatör işleri
+docs/                           Mimari, anlatım, artefaktlar, test vektörü
 ```
 
 ## Dokümanlar
