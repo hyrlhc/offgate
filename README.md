@@ -65,52 +65,33 @@ The full loop has been executed on testnet:
 
 ---
 
-## Architecture
+## How it works, in three stages
 
 ```mermaid
-flowchart TB
-    subgraph online["ONLINE - buying a ticket"]
-        U["User"]
-        WK["Stellar Wallets Kit<br/>integration partner"]
-        AN["Anchor<br/>SEP-1, SEP-10, SEP-38, SEP-6"]
-        OP["Operator signing endpoint<br/>server side"]
-        SC["Soroban contract<br/>lock_float, top_up"]
-
-        U -->|"connect wallet"| WK
-        WK -->|"one signature"| SC
-        U -->|"deposit TRY"| AN
-        AN -->|"USDC"| U
-        SC -->|"read the on-chain lock"| OP
-        OP -->|"signed entitlement"| U
-    end
-
-    U ==>|"bundle: entitlement plus N pre-signed receipts, no secret key"| P
-
-    subgraph offline["OFFLINE - passing through"]
-        P["Phone, airplane mode"]
-        G1["Gate M307<br/>ESP32, fare 100 TRY"]
-        G2["Gate M308<br/>ESP32, fare 80 TRY"]
-
-        P -->|"local wifi, HTTP"| G1
-        P -->|"local wifi, HTTP"| G2
-        G1 <-.->|"ESP-NOW: spend records, remote approval"| G2
-    end
-
-    subgraph chain["SETTLEMENT"]
-        CA["settle, permissionless"]
-        BK["Operator bank account"]
-
-        CA -->|"SEP-6 withdraw"| BK
-    end
-
-    G1 -->|"signed collection vouchers"| P
-    G2 -->|"signed collection vouchers"| P
-    P ==>|"the user carries the data and is paid for it"| CA
-
-    style offline fill:#1a1a2e,stroke:#e94560,stroke-width:3px,color:#fff
-    style online fill:#16213e,stroke:#0f8,stroke-width:2px,color:#fff
-    style chain fill:#0f3460,stroke:#ffd460,stroke-width:2px,color:#fff
+flowchart LR
+    A["1. Online<br/>lira in, balance locked on chain"]
+    B["2. Offline<br/>the gate verifies and opens"]
+    C["3. Back online<br/>receipts settled, operator paid"]
+    A --> B --> C
 ```
+
+**Online.** The user deposits lira through the anchor, receives USDC, and locks
+it in the contract. The lock records the gate, the fare and the exchange rate.
+The operator signs a statement of that lock. The browser pre-signs one receipt
+per pass. All of this happens before the user reaches the venue.
+
+**Offline.** The user joins the gate's own wifi and sends the signed package.
+The gate checks the operator's signature, checks the user's signature, checks
+its own ledger for reuse, and opens. It has no internet connection and no secret
+key of its own.
+
+**Back online.** Receipts are written to the contract, the money moves to the
+operator, and the operator withdraws it as lira. Users can submit their own
+receipts and are paid a share of the fee for doing so.
+
+Two gates in the same venue also talk to each other over radio, so a ticket
+bought for one gate can be used at the other without either of them going
+online.
 
 ---
 
@@ -219,26 +200,17 @@ signs everything it says.
 
 ### Announcements, one way
 
-Broadcast when a pass is accepted.
-
-```
-"OFFGATE-GOSSIP-v1"(17) || gate(16) || ent_hash(32) || seq(4)
-  || counter(4) || ts(8)                                        = 81 bytes
-+ signature(64) + public key(32)                                = 177 bytes
-```
-
-The neighbour verifies and writes the spend marker to its own ledger.
+When a gate accepts a pass it broadcasts a short signed record: which gate it
+is, which receipt it just spent, and its running counter. Neighbours verify the
+signature and write the same spend marker into their own ledgers. Nothing is
+expected in reply.
 
 ### Questions and approvals, two way
 
-Sent when a user presents a ticket issued for another gate. Domains are
-`OFFGATE-ASK-v1` and `OFFGATE-ACK-v1`.
-
-```
-domain(14) || from(16) || to(16) || ent_hash(32) || seq(4)
-  || nonce(8) || verdict(1)                                     = 91 bytes
-+ signature(64) + public key(32)                                = 187 bytes
-```
+When a user presents a ticket issued for another gate, the receiving gate sends
+a signed question and waits for a signed answer. The question carries the
+receipt in dispute and a random nonce; the answer carries the same nonce and a
+verdict.
 
 The receiving gate can verify the ticket itself. What it cannot know is whether
 that receipt has been spent, because the ledger for it lives at the issuing
@@ -300,12 +272,8 @@ Each gate has its own fare. M307 charges 100 TRY, M308 charges 80 TRY. The
 ticket's signature sets a ceiling; the gate's signature sets the amount actually
 taken.
 
-```
-"OFFGATE-VCHR-v1"(15) || ent_hash(32) || seq(4) || charged_try(8) || ts(8)
-  = 67 bytes, signed by the gate key
-```
-
-The contract deducts `charged_try`, not the ceiling. The difference stays in the
+The gate signs a short record naming the receipt and the amount it took. The
+contract deducts `charged_try`, not the ceiling. The difference stays in the
 user's balance. The two signatures constrain each other: the gate cannot charge
 above the ceiling because the contract rejects it, and it has no reason to
 under-report because the operator receives the money.
@@ -371,32 +339,34 @@ from zero to positive, because carrying the data closed the outstanding pass.
 
 ---
 
-## Canonical message formats
+## Signed message formats
 
-Four platforms produce these bytes: the contract in Rust, the operator endpoint
-in Node, the browser in TypeScript, and the gate in C++. JSON guarantees neither
-field order nor whitespace, so every signed message is fixed length.
+Four codebases produce the bytes that get signed: the contract in Rust, the
+operator endpoint in Node, the browser in TypeScript, and the gate in C++. If
+any of them laid out a field differently, signatures would fail in the field and
+not on anyone's desk.
 
-| Message | Bytes | Layout |
+JSON does not guarantee field order or whitespace, so nothing signed here is
+JSON. Every signed message is a fixed-length byte string with a version prefix,
+big-endian integers and zero-padded identifiers.
+
+| Message | Signed by | Size |
 |---|---|---|
-| Entitlement | 138 | `"OFFGATE-ENT-v1"(14) \|\| user(32) \|\| device_pk(32) \|\| event(16) \|\| gate(16) \|\| fare_try(8) \|\| rate(8) \|\| max_uses(4) \|\| expires(8)` |
-| Receipt | 67 | `"OFFGATE-RCPT-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| fare_try(8) \|\| ts(8)` |
-| Collection voucher | 67 | `"OFFGATE-VCHR-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| charged_try(8) \|\| ts(8)` |
-| Counter declaration | 27 | `"OFFGATE-RPRT-v1"(15) \|\| counter(4) \|\| ts(8)` |
-| Spend announcement | 81 | `"OFFGATE-GOSSIP-v1"(17) \|\| gate(16) \|\| ent_hash(32) \|\| seq(4) \|\| counter(4) \|\| ts(8)` |
-| Question, approval | 91 | `domain(14) \|\| from(16) \|\| to(16) \|\| ent_hash(32) \|\| seq(4) \|\| nonce(8) \|\| verdict(1)` |
+| Entitlement | Operator | 138 bytes |
+| Receipt | User's device key | 67 bytes |
+| Collection voucher | Gate | 67 bytes |
+| Counter declaration | Gate | 27 bytes |
+| Spend announcement | Gate | 81 bytes |
+| Question, approval | Gate | 91 bytes |
 
-Integers are big endian. Identifiers are ASCII, zero padded to a fixed width.
-Gate identity is absent from the receipt and the voucher, because the public key
-that verifies the signature already identifies the gate, and Soroban has no
-`Symbol`-to-bytes conversion inside wasm.
+The exact field order of each message, with a worked example and the expected
+signature, is in [`docs/test-vector.md`](docs/test-vector.md).
 
 Agreement is enforced by tests rather than by convention. On the Rust side,
-`canonical_message_matches_javascript_vector` compares against the fixed vector
-in [`docs/test-vector.md`](docs/test-vector.md). On the ESP32 a self-test runs at
-boot and prints the result to the serial port; if it fails, the gate is not
-speaking the same language as the contract and the reason is visible
-immediately.
+`canonical_message_matches_javascript_vector` compares against that vector. On
+the ESP32 a self-test runs at boot and prints the result to the serial port; if
+it fails, the gate is not speaking the same language as the contract and the
+reason is visible before anyone tries to use it.
 
 ---
 

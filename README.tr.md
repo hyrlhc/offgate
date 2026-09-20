@@ -65,52 +65,32 @@ operatör bunu anchor üzerinden TL olarak çeker. Tam döngü testnet üzerinde
 
 ---
 
-## Mimari
+## Üç aşamada nasıl çalışıyor
 
 ```mermaid
-flowchart TB
-    subgraph online["CEVRIMICI - bilet alma"]
-        U["Kullanici"]
-        WK["Stellar Wallets Kit<br/>entegrasyon ortagi"]
-        AN["Anchor<br/>SEP-1, SEP-10, SEP-38, SEP-6"]
-        OP["Operator imza ucu<br/>sunucu tarafi"]
-        SC["Soroban sozlesmesi<br/>lock_float, top_up"]
-
-        U -->|"cuzdan bagla"| WK
-        WK -->|"tek imza"| SC
-        U -->|"TL yatir"| AN
-        AN -->|"USDC"| U
-        SC -->|"zincirdeki kilidi oku"| OP
-        OP -->|"imzali bilet"| U
-    end
-
-    U ==>|"paket: bilet ve N on-imzali fis, gizli anahtar yok"| P
-
-    subgraph offline["CEVRIMDISI - gecis"]
-        P["Telefon, ucak modu"]
-        G1["Kapi M307<br/>ESP32, ucret 100 TRY"]
-        G2["Kapi M308<br/>ESP32, ucret 80 TRY"]
-
-        P -->|"yerel wifi, HTTP"| G1
-        P -->|"yerel wifi, HTTP"| G2
-        G1 <-.->|"ESP-NOW: harcama kaydi, uzaktan onay"| G2
-    end
-
-    subgraph chain["SENKRONIZASYON"]
-        CA["settle, izin gerektirmez"]
-        BK["Operatorun banka hesabi"]
-
-        CA -->|"SEP-6 withdraw"| BK
-    end
-
-    G1 -->|"imzali tahsilat belgesi"| P
-    G2 -->|"imzali tahsilat belgesi"| P
-    P ==>|"kullanici veriyi tasir ve karsiligini alir"| CA
-
-    style offline fill:#1a1a2e,stroke:#e94560,stroke-width:3px,color:#fff
-    style online fill:#16213e,stroke:#0f8,stroke-width:2px,color:#fff
-    style chain fill:#0f3460,stroke:#ffd460,stroke-width:2px,color:#fff
+flowchart LR
+    A["1. Cevrimici<br/>TL girer, bakiye zincire kilitlenir"]
+    B["2. Cevrimdisi<br/>kapi dogrular ve acilir"]
+    C["3. Tekrar cevrimici<br/>fisler zincire, operator odenir"]
+    A --> B --> C
 ```
+
+**Çevrimiçi.** Kullanıcı anchor üzerinden TL yatırır, USDC alır ve sözleşmeye
+kilitler. Kilit; kapıyı, geçiş ücretini ve kuru kaydeder. Operatör bu kilidin
+beyanını imzalar. Tarayıcı her geçiş için bir fiş önceden imzalar. Bunların
+hepsi kullanıcı mekâna varmadan önce olur.
+
+**Çevrimdışı.** Kullanıcı kapının kendi wifi'sine bağlanır ve imzalı paketi
+gönderir. Kapı operatörün imzasını kontrol eder, kullanıcının imzasını kontrol
+eder, kendi defterinde tekrar kullanım var mı bakar ve açılır. İnternet bağlantısı
+da kendine ait gizli bir anahtarı da yoktur.
+
+**Tekrar çevrimiçi.** Fişler sözleşmeye yazılır, para operatöre geçer, operatör
+bunu TL olarak çeker. Kullanıcılar kendi fişlerini gönderebilir ve karşılığında
+ücretin bir kısmını geri alır.
+
+Aynı mekândaki iki kapı ayrıca telsizle birbiriyle konuşur; böylece bir kapı
+için alınan bilet, ikisi de çevrimiçi olmadan diğer kapıda kullanılabilir.
 
 ---
 
@@ -217,26 +197,15 @@ söylediği her şeyi imzalar.
 
 ### Duyuru, tek yönlü
 
-Bir geçiş kabul edildiğinde yayılır.
-
-```
-"OFFGATE-GOSSIP-v1"(17) || kapi(16) || ent_hash(32) || seq(4)
-  || sayac(4) || ts(8)                                          = 81 bayt
-+ imza(64) + acik anahtar(32)                                   = 177 bayt
-```
-
-Komşu doğrular ve harcama işaretini kendi defterine yazar.
+Bir kapı geçişi kabul ettiğinde kısa ve imzalı bir kayıt yayar: hangi kapı
+olduğu, hangi fişi harcadığı ve o anki sayacı. Komşular imzayı doğrular ve aynı
+harcama işaretini kendi defterlerine yazar. Cevap beklenmez.
 
 ### Soru ve onay, çift yönlü
 
-Kullanıcı başka bir kapı için düzenlenmiş bilet sunduğunda gönderilir. Alan
-adları `OFFGATE-ASK-v1` ve `OFFGATE-ACK-v1`.
-
-```
-alan_adi(14) || soran(16) || sorulan(16) || ent_hash(32) || seq(4)
-  || nonce(8) || karar(1)                                       = 91 bayt
-+ imza(64) + acik anahtar(32)                                   = 187 bayt
-```
+Kullanıcı başka bir kapı için düzenlenmiş bilet sunduğunda, karşılayan kapı
+imzalı bir soru gönderir ve imzalı cevabı bekler. Soru, tartışmalı fişi ve
+rastgele bir nonce taşır; cevap aynı nonce'u ve kararı taşır.
 
 Karşılayan kapı bileti kendi başına doğrulayabilir. Bilemeyeceği tek şey o fişin
 harcanıp harcanmadığıdır, çünkü o defter bileti düzenleyen kapıdadır. Bu yüzden
@@ -296,12 +265,8 @@ kapının onay vermeden önce fişi gerçekten yaktığını kanıtlar.
 Her kapının kendi ücreti var. M307 100 TL, M308 80 TL tahsil ediyor. Biletin
 imzası bir üst sınır koyar; kapının imzası fiilen alınan tutarı belirler.
 
-```
-"OFFGATE-VCHR-v1"(15) || ent_hash(32) || seq(4) || charged_try(8) || ts(8)
-  = 67 bayt, kapi anahtariyla imzali
-```
-
-Sözleşme üst sınırı değil, `charged_try` değerini düşer. Fark kullanıcının
+Kapı, fişi ve aldığı tutarı adlandıran kısa bir kayıt imzalıyor. Sözleşme üst
+sınırı değil, `charged_try` değerini düşer. Fark kullanıcının
 bakiyesinde kalır. İki imza birbirini kısıtlar: kapı üst sınırın üzerinde tahsil
 edemez çünkü sözleşme reddeder, eksik beyan etmesi de işine gelmez çünkü parayı
 operatör alır.
@@ -367,31 +332,33 @@ pozitife çıktı, çünkü veriyi taşımak açık kalan hakkı kapattı.
 
 ---
 
-## Kanonik mesaj biçimleri
+## İmzalanan mesaj biçimleri
 
-Bu baytları dört platform üretiyor: Rust'ta sözleşme, Node'da operatör ucu,
-TypeScript'te tarayıcı, C++'ta kapı. JSON ne alan sırasını ne boşluğu garanti
-ettiği için imzalanan her mesaj sabit uzunluktadır.
+İmzalanan baytları dört ayrı kod tabanı üretiyor: Rust'ta sözleşme, Node'da
+operatör ucu, TypeScript'te tarayıcı, C++'ta kapı. Herhangi biri bir alanı
+farklı yerleştirse, imzalar masa başında değil sahada tutmazdı.
 
-| Mesaj | Bayt | Düzen |
+JSON ne alan sırasını ne boşluğu garanti ettiği için burada imzalanan hiçbir şey
+JSON değil. İmzalanan her mesaj, sürüm öneki taşıyan, tam sayıları big endian ve
+kimlikleri sıfırla doldurulmuş sabit uzunlukta bir bayt dizisi.
+
+| Mesaj | Kim imzalar | Boyut |
 |---|---|---|
-| Bilet | 138 | `"OFFGATE-ENT-v1"(14) \|\| user(32) \|\| device_pk(32) \|\| event(16) \|\| gate(16) \|\| fare_try(8) \|\| rate(8) \|\| max_uses(4) \|\| expires(8)` |
-| Fiş | 67 | `"OFFGATE-RCPT-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| fare_try(8) \|\| ts(8)` |
-| Tahsilat belgesi | 67 | `"OFFGATE-VCHR-v1"(15) \|\| ent_hash(32) \|\| seq(4) \|\| charged_try(8) \|\| ts(8)` |
-| Sayaç beyanı | 27 | `"OFFGATE-RPRT-v1"(15) \|\| counter(4) \|\| ts(8)` |
-| Harcama duyurusu | 81 | `"OFFGATE-GOSSIP-v1"(17) \|\| gate(16) \|\| ent_hash(32) \|\| seq(4) \|\| counter(4) \|\| ts(8)` |
-| Soru, onay | 91 | `alan_adi(14) \|\| from(16) \|\| to(16) \|\| ent_hash(32) \|\| seq(4) \|\| nonce(8) \|\| verdict(1)` |
+| Bilet | Operatör | 138 bayt |
+| Fiş | Kullanıcının cihaz anahtarı | 67 bayt |
+| Tahsilat belgesi | Kapı | 67 bayt |
+| Sayaç beyanı | Kapı | 27 bayt |
+| Harcama duyurusu | Kapı | 81 bayt |
+| Soru, onay | Kapı | 91 bayt |
 
-Tam sayılar big endian. Kimlikler ASCII ve sabit genişliğe sıfırla doldurulmuş.
-Kapı kimliği fişte ve tahsilat belgesinde yok, çünkü imzayı doğrulayan açık
-anahtar zaten kapıyı belirliyor ve Soroban'da wasm içinde `Symbol` bayta
-çevrilemiyor.
+Her mesajın tam alan sırası, çalışılmış bir örnek ve beklenen imzayla birlikte
+[`docs/test-vector.md`](docs/test-vector.md) içinde.
 
 Uyum, gelenekle değil testlerle zorlanıyor. Rust tarafında
-`canonical_message_matches_javascript_vector`,
-[`docs/test-vector.md`](docs/test-vector.md) içindeki sabit vektörle karşılaştırma
-yapıyor. ESP32'de açılışta bir öz-test çalışıp sonucu seri porta basıyor;
-geçmezse kapı sözleşmeyle aynı dili konuşmuyor demektir ve sebebi hemen görülür.
+`canonical_message_matches_javascript_vector` bu vektörle karşılaştırma yapıyor.
+ESP32'de açılışta bir öz-test çalışıp sonucu seri porta basıyor; geçmezse kapı
+sözleşmeyle aynı dili konuşmuyor demektir ve sebebi daha kimse kullanmaya
+çalışmadan görülür.
 
 ---
 
